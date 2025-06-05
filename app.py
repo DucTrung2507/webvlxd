@@ -28,10 +28,10 @@ def upload():
     align = request.form.get('align', 'C')
 
     # Lưu file tạm để xử lý
-    temp_path = os.path.join("temp.pdf")
+    temp_path = "temp.pdf"
     pdf_file.save(temp_path)
     
-    lines = lines.encode('latin-1', 'ignore').decode('latin-1')  # Bỏ ký tự không hỗ trợ
+    lines = []
 
     # Kiểm tra nội dung PDF (văn bản hoặc hình ảnh)
     try:
@@ -48,11 +48,13 @@ def upload():
             lines.extend(text.splitlines())
 
     os.remove(temp_path)  # Xóa file tạm sau khi xử lý
+    # Xử lý encoding
+    clean_lines = [line.encode('utf-8', 'ignore').decode('utf-8') for line in lines]
 
     # Tạo PDF mới với mỗi dòng trên một trang riêng
     output_pdf = FPDF(format='A4')
 
-    for line in lines:
+    for line in clean_lines:
         if line.strip():  # Bỏ dòng trống
             output_pdf.add_page()
             output_pdf.set_font(font_name, style='', size=font_size)
@@ -62,7 +64,7 @@ def upload():
 
     # Xuất file PDF ra bộ nhớ
     pdf_bytes = BytesIO()
-    pdf_bytes.write(output_pdf.output(dest='S').encode("latin1", errors="ignore"))
+    pdf_bytes.write(output_pdf.output(dest='S').encode('utf-8'))
     pdf_bytes.seek(0)
 
     return send_file(pdf_bytes, mimetype='application/pdf', as_attachment=True, download_name="output.pdf")
