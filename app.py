@@ -47,8 +47,10 @@ def upload():
                         ocr_text = pytesseract.image_to_string(image)
                         lines.extend(ocr_text.splitlines())
     except Exception as e:
-        os.remove(temp_path)
-        return f"Lỗi khi xử lý PDF: {e}", 500
+        import traceback
+        error_details = traceback.format_exc()
+        print(error_details)  # Log chi tiết
+        return f"Internal server error: {e}", 500
 
     os.remove(temp_path)  # Xóa file tạm sau khi xử lý
 
