@@ -32,42 +32,44 @@ def upload():
     pdf_file.save(temp_path)
     
     lines = []
-
-    # Kiểm tra nội dung PDF (văn bản hoặc hình ảnh)
     try:
         with pdfplumber.open(temp_path) as pdf:
-            for page in pdf.pages:
+            # Duyệt qua từng trang của file PDF
+            for i, page in enumerate(pdf.pages):
                 text = page.extract_text()
                 if text:
+                    # Nếu có text, tách và thêm từng dòng vào list
                     lines.extend(text.splitlines())
+                else:
+                    # Nếu không có text (PDF dạng ảnh), chuyển trang đó thành ảnh để OCR
+                    images = convert_from_path(temp_path, first_page=i+1, last_page=i+1)
+                    for image in images:
+                        ocr_text = pytesseract.image_to_string(image)
+                        lines.extend(ocr_text.splitlines())
     except Exception as e:
-        # Nếu không đọc được văn bản, dùng OCR
-        images = convert_from_path(temp_path)
-        for image in images:
-            text = pytesseract.image_to_string(image)
-            lines.extend(text.splitlines())
+        os.remove(temp_path)
+        return f"Lỗi khi xử lý PDF: {e}", 500
 
     os.remove(temp_path)  # Xóa file tạm sau khi xử lý
 
-    # Xử lý các ký tự không thuộc latin-1 (ví dụ dấu bullet •)
+    # Xử lý các ký tự không thuộc Latin-1, tránh lỗi khi mã hóa
     clean_lines = [line.encode('latin1', errors='ignore').decode('latin1') for line in lines]
 
-    # Tạo PDF mới với mỗi dòng trên một trang riêng
+    # Tạo một PDF mới với mỗi dòng được đưa lên một trang riêng
     output_pdf = FPDF(format='A4')
-
     for line in clean_lines:
-        if line.strip():  # Bỏ dòng trống
+        if line.strip():  # Bỏ qua dòng trống
             output_pdf.add_page()
             output_pdf.set_font(font_name, style='', size=font_size)
             output_pdf.set_xy(x_pos, y_pos)
             page_width = output_pdf.w - 2 * output_pdf.l_margin
             output_pdf.cell(page_width, 10, line, align=align)
 
-    # Xuất file PDF ra bộ nhớ, xử lý encoding cho giai đoạn cuối cùng
+    # Xuất file PDF ra bộ nhớ và gửi về cho người dùng
     pdf_bytes = BytesIO()
     pdf_bytes.write(output_pdf.output(dest='S').encode('latin1', errors='ignore'))
     pdf_bytes.seek(0)
-
+    
     return send_file(pdf_bytes, mimetype='application/pdf', as_attachment=True, download_name="output.pdf")
 
 if __name__ == '__main__':
