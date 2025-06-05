@@ -31,7 +31,7 @@ def upload():
     temp_path = os.path.join("temp.pdf")
     pdf_file.save(temp_path)
     
-    lines = []
+    lines = lines.encode('latin-1', 'ignore').decode('latin-1')  # Bỏ ký tự không hỗ trợ
 
     # Kiểm tra nội dung PDF (văn bản hoặc hình ảnh)
     try:
