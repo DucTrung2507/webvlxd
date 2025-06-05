@@ -5,8 +5,6 @@ from io import BytesIO
 from pdf2image import convert_from_path
 import pytesseract
 
-# Đảm bảo rằng đường dẫn này đúng với hệ thống của bạn. Trong hầu hết các bản phân phối dựa trên Debian/Ubuntu, tesseract thường nằm tại /usr/bin/tesseract.
-pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
 import os
 
