@@ -62,7 +62,7 @@ def upload():
 
     # Xuất file PDF ra bộ nhớ
     pdf_bytes = BytesIO()
-    pdf_bytes.write(output_pdf.output(dest='S').encode('latin1'))
+    pdf_bytes.write(output_pdf.output(dest='S').encode("latin1", errors="ignore"))
     pdf_bytes.seek(0)
 
     return send_file(pdf_bytes, mimetype='application/pdf', as_attachment=True, download_name="output.pdf")
