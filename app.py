@@ -40,7 +40,7 @@ def upload():
                 text = page.extract_text()
                 if text:
                     lines.extend(text.splitlines())
-    except:
+    except Exception as e:
         # Nếu không đọc được văn bản, dùng OCR
         images = convert_from_path(temp_path)
         for image in images:
@@ -48,8 +48,9 @@ def upload():
             lines.extend(text.splitlines())
 
     os.remove(temp_path)  # Xóa file tạm sau khi xử lý
-    # Xử lý encoding
-    clean_lines = [line.encode('utf-8', 'ignore').decode('utf-8') for line in lines]
+
+    # Xử lý các ký tự không thuộc latin-1 (ví dụ dấu bullet •)
+    clean_lines = [line.encode('latin1', errors='ignore').decode('latin1') for line in lines]
 
     # Tạo PDF mới với mỗi dòng trên một trang riêng
     output_pdf = FPDF(format='A4')
@@ -62,9 +63,9 @@ def upload():
             page_width = output_pdf.w - 2 * output_pdf.l_margin
             output_pdf.cell(page_width, 10, line, align=align)
 
-    # Xuất file PDF ra bộ nhớ
+    # Xuất file PDF ra bộ nhớ, xử lý encoding cho giai đoạn cuối cùng
     pdf_bytes = BytesIO()
-    pdf_bytes.write(output_pdf.output(dest='S').encode('utf-8'))
+    pdf_bytes.write(output_pdf.output(dest='S').encode('latin1', errors='ignore'))
     pdf_bytes.seek(0)
 
     return send_file(pdf_bytes, mimetype='application/pdf', as_attachment=True, download_name="output.pdf")
