@@ -1,0 +1,5 @@
+Flask
+fpdf
+pdfplumber
+pdf2image
+pytesseract

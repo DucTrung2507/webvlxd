@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Import PDF & Tùy chỉnh In A4 đã sửa</title>
+</head>
+<body>
+  <h1>Import File PDF & Tùy chỉnh In A4 đã sửa</h1>
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <label for="pdf_file">Chọn file PDF:</label>
+    <input type="file" id="pdf_file" name="pdf_file" accept=".pdf" required><br><br>
+    
+    <label for="font_name">Chọn kiểu chữ:</label>
+    <select id="font_name" name="font_name">
+      <option value="Arial">Arial</option>
+      <option value="Times">Times</option>
+      <option value="Courier">Courier</option>
+    </select><br><br>
+    
+    <label for="font_size">Cỡ chữ (ví dụ: 40):</label>
+    <input type="number" id="font_size" name="font_size" value="40"><br><br>
+    
+    <label for="x_pos">Vị trí X (mm):</label>
+    <input type="number" step="0.1" id="x_pos" name="x_pos" value="10"><br><br>
+    
+    <label for="y_pos">Vị trí Y (mm):</label>
+    <input type="number" step="0.1" id="y_pos" name="y_pos" value="50"><br><br>
+    
+    <label for="align">Canh lề:</label>
+    <select id="align" name="align">
+      <option value="C">Giữa</option>
+      <option value="L">Trái</option>
+      <option value="R">Phải</option>
+    </select><br><br>
+    
+    <input type="submit" value="Upload và Tạo PDF">
+  </form>
+</body>
+</html>
