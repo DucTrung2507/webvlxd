@@ -1,6 +1,0 @@
-flask
-gunicorn
-fpdf
-pdfplumber
-pdf2image
-pytesseract

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#14283f">
+    <meta name="description" content="Quản lý hóa đơn, mặt hàng và nhập kho VLXD Minh Hùng.">
+    <title>Quản lý bán hàng | VLXD Minh Hùng</title>
+    <link rel="stylesheet" href="css/trangchu.css">
+    <script defer src="js/order-data.js"></script>
+    <script defer src="js/order-api.js"></script>
+    <script defer src="js/inventory.js"></script>
+    <script defer src="js/order-list.js"></script>
+    <script defer src="js/order.js"></script>
+    <script defer src="js/printorder.js"></script>
+</head>
+<body>
+<div class="app-shell">
+    <header class="header">
+        <a class="brand" href="index.html" aria-label="VLXD Minh Hùng — Trang chủ">
+            <img src="images/logo.png" alt="" width="44" height="44">
+            <span><strong>MINH HÙNG</strong><small>VẬT LIỆU XÂY DỰNG</small></span>
+        </a>
+        <nav class="main-nav" aria-label="Điều hướng chính">
+            <button type="button" class="active" data-view="sales" aria-current="page">Hóa đơn</button>
+            <button type="button" data-view="warehouse">Kho</button>
+            <button type="button" data-view="products">Mặt hàng</button>
+        </nav>
+        <span class="header-label">Quản lý bán hàng</span>
+    </header>
+
+    <main class="content">
+        <section id="salesView" data-page="sales" aria-labelledby="salesTitle">
+        <div class="page-heading">
+            <div>
+                <p class="eyebrow">TỔNG QUAN BÁN HÀNG</p>
+                <h1 id="salesTitle">Danh sách hóa đơn</h1>
+                <p class="muted">Theo dõi hóa đơn, thanh toán và công nợ của khách hàng.</p>
+            </div>
+            <button type="button" class="primary" data-open-order><span aria-hidden="true">＋</span> Tạo hóa đơn</button>
+        </div>
+
+        <section class="stats" aria-label="Thống kê hóa đơn đang hiển thị">
+            <div class="stat-card"><span>Số hóa đơn</span><strong id="statsCount">0</strong><small>Theo bộ lọc đang chọn</small></div>
+            <div class="stat-card"><span>Tổng tiền hàng</span><strong id="statsTotal">0 đ</strong><small>Giá trị hóa đơn</small></div>
+            <div class="stat-card"><span>Khách đã trả</span><strong id="statsPaid" class="text-success">0 đ</strong><small>Tổng tiền thanh toán</small></div>
+            <div class="stat-card"><span>Công nợ</span><strong id="statsDebt" class="text-debt">0 đ</strong><small>Số tiền còn lại</small></div>
+        </section>
+
+        <section class="invoice-section" aria-labelledby="historyTitle">
+            <div class="section-heading">
+                <div><h2 id="historyTitle">Lịch sử hóa đơn</h2><p class="muted">Để trống ngày để xem toàn bộ hóa đơn từ trước đến nay.</p></div>
+                <button type="button" id="refreshOrders" class="secondary">Làm mới</button>
+            </div>
+            <form id="filterForm" class="filter-form">
+                <div class="form-group"><label for="fromDate">Từ ngày</label><input type="date" id="fromDate" name="fromDate"></div>
+                <div class="form-group"><label for="toDate">Đến ngày</label><input type="date" id="toDate" name="toDate"></div>
+                <div class="filter-actions"><button type="submit" class="primary">Tìm kiếm</button><button type="button" id="resetFilters" class="secondary">Xem tất cả</button></div>
+                <p id="filterError" class="form-error" role="alert" hidden></p>
+            </form>
+            <div class="results-heading"><p id="resultCount" class="muted">Đang tải danh sách hóa đơn…</p><span class="sort-label">Mới nhất trước</span></div>
+            <p id="listStatus" class="list-status" role="status" hidden></p>
+            <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Bảng hóa đơn, có thể cuộn ngang">
+                <table class="order-table">
+                    <caption class="sr-only">Danh sách hóa đơn theo khoảng ngày đã chọn</caption>
+                    <thead><tr><th scope="col">Mã hóa đơn</th><th scope="col">Ngày tạo</th><th scope="col">Khách hàng</th><th scope="col">Địa chỉ</th><th scope="col">Mặt hàng</th><th scope="col" class="money">Tổng tiền</th><th scope="col" class="money">Khách trả</th><th scope="col" class="money">Công nợ</th><th scope="col">Nhân viên giao</th></tr></thead>
+                    <tbody id="orderList"><tr class="empty-row"><td colspan="9">Đang tải hóa đơn…</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+        </section>
+
+        <section id="productsView" data-page="products" aria-labelledby="productsTitle" hidden>
+            <div class="page-heading">
+                <div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h1 id="productsTitle">Mặt hàng</h1><p class="muted">Quản lý tên hàng, loại hàng và giá bán để tạo hóa đơn nhanh hơn.</p></div>
+                <button type="button" class="primary" data-open-product><span aria-hidden="true">＋</span> Thêm mặt hàng</button>
+            </div>
+            <section class="invoice-section" aria-labelledby="catalogTitle">
+                <div class="section-heading"><div><h2 id="catalogTitle">Danh sách mặt hàng</h2><p id="productCount" class="muted">Đang tải danh mục…</p></div><button type="button" id="productRefresh" class="secondary">Làm mới</button></div>
+                <p id="productStatus" class="list-status" role="status" hidden></p>
+                <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Danh mục mặt hàng, có thể cuộn ngang">
+                    <table class="order-table product-table">
+                        <caption class="sr-only">Mã hàng, tên hàng, loại hàng và giá bán</caption>
+                        <thead><tr><th scope="col">Mã hàng</th><th scope="col">Tên hàng</th><th scope="col">Loại hàng</th><th scope="col" class="money">Giá bán</th></tr></thead>
+                        <tbody id="productList"><tr class="empty-row"><td colspan="4">Đang tải mặt hàng…</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+        </section>
+
+        <section id="warehouseView" data-page="warehouse" aria-labelledby="warehouseTitle" hidden>
+            <div class="page-heading">
+                <div><p class="eyebrow">QUẢN LÝ NHẬP HÀNG</p><h1 id="warehouseTitle">Kho hàng</h1><p class="muted">Theo dõi hóa đơn nhập và số lượng hàng còn trong kho.</p></div>
+                <div class="heading-actions"><button type="button" id="warehouseRefresh" class="secondary">Làm mới</button><button type="button" class="primary" data-open-receipt><span aria-hidden="true">＋</span> Nhập kho</button></div>
+            </div>
+            <p id="inventoryStatus" class="list-status page-status" role="status" hidden></p>
+            <div class="warehouse-grid">
+                <section class="invoice-section receipts-section" aria-labelledby="receiptsTitle">
+                    <div class="section-heading"><div><h2 id="receiptsTitle">Hóa đơn nhập</h2><p id="receiptCount" class="muted">Đang tải hóa đơn nhập…</p></div><span class="sort-label">Mới nhất trước</span></div>
+                    <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Bảng hóa đơn nhập, có thể cuộn ngang">
+                        <table class="order-table receipt-table">
+                            <caption class="sr-only">Lịch sử hóa đơn nhập hàng và thanh toán nhà cung cấp</caption>
+                            <thead><tr><th scope="col">Mã hóa đơn</th><th scope="col">Ngày nhập</th><th scope="col">Nhà cung cấp</th><th scope="col">Địa chỉ</th><th scope="col">Mặt hàng</th><th scope="col" class="money">Tổng tiền</th><th scope="col" class="money">Đã trả</th><th scope="col" class="money">Còn nợ</th></tr></thead>
+                            <tbody id="receiptList"><tr class="empty-row"><td colspan="8">Đang tải hóa đơn nhập…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+                <section class="invoice-section stock-section" aria-labelledby="stockTitle">
+                    <div class="section-heading"><div><h2 id="stockTitle">Số lượng hàng trong kho</h2><p id="stockCount" class="muted">Đang tải tồn kho…</p></div></div>
+                    <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Số lượng hàng trong kho, có thể cuộn ngang">
+                        <table class="order-table stock-table">
+                            <caption class="sr-only">Mã hàng, tên hàng và số lượng tồn kho</caption>
+                            <thead><tr><th scope="col">Mã hàng</th><th scope="col">Tên hàng</th><th scope="col" class="money">Số lượng</th></tr></thead>
+                            <tbody id="stockList"><tr class="empty-row"><td colspan="3">Đang tải tồn kho…</td></tr></tbody>
+                        </table>
+                    </div>
+                    <p class="stock-note">Tồn kho được tính từ hóa đơn nhập và hóa đơn bán có mã sản phẩm.</p>
+                </section>
+            </div>
+        </section>
+        <footer class="page-footer">VLXD Minh Hùng <span aria-hidden="true">·</span> Quản lý bán hàng và kho</footer>
+    </main>
+</div>
+
+<dialog id="orderPanel" class="order-panel" aria-labelledby="orderTitle">
+    <form id="createForm" novalidate>
+        <div class="panel-heading"><div><p class="eyebrow">HÓA ĐƠN BÁN HÀNG</p><h2 id="orderTitle">Tạo hóa đơn mới</h2><p class="order-id">Mã dự kiến: <strong id="orderId">…</strong></p></div><button type="button" class="icon-button" data-close-order aria-label="Đóng tạo hóa đơn">×</button></div>
+        <div class="panel-content">
+            <p id="orderFormError" class="form-error" role="alert" hidden></p>
+            <div class="customer-grid">
+                <div class="form-group"><label for="customer">Tên khách hàng <span class="required" aria-hidden="true">*</span></label><input type="text" id="customer" name="customer" autocomplete="name" placeholder="Nhập tên khách hàng" required></div>
+                <div class="form-group"><label for="address">Địa chỉ</label><input type="text" id="address" name="address" autocomplete="street-address" placeholder="Địa chỉ giao hàng"></div>
+            </div>
+            <section aria-labelledby="itemsTitle">
+                <div class="items-heading"><h3 id="itemsTitle">Chi tiết hàng hóa</h3><button type="button" id="addItem" class="text-button">＋ Thêm mặt hàng</button></div>
+                <div class="items-scroll" tabindex="0" role="region" aria-label="Các mặt hàng trong hóa đơn, có thể cuộn ngang">
+                    <div class="item-header" aria-hidden="true"><div>#</div><div>Tên hàng</div><div>Số lượng</div><div>ĐVT</div><div>Đơn giá</div><div>Thành tiền</div><div></div></div>
+                    <div id="items"></div>
+                    <datalist id="productOptions"></datalist>
+                </div>
+            </section>
+            <div class="summary-grid">
+                <div class="form-group"><label for="shipper">Nhân viên giao hàng</label><input type="text" id="shipper" name="shipper" placeholder="Tên nhân viên giao"></div>
+                <div class="summary">
+                    <p>Tổng tiền <strong id="total">0 đ</strong></p>
+                    <div class="form-group"><label for="paid">Khách trả</label><div class="paid-input"><input type="text" id="paid" name="paid" inputmode="numeric" placeholder="0"><button type="button" id="payFull" class="secondary">Trả đủ</button></div></div>
+                    <p class="debt">Còn nợ <strong id="debt">0 đ</strong></p>
+                </div>
+            </div>
+        </div>
+        <div class="btn-group"><button type="button" class="secondary" data-close-order>Đóng</button><div class="save-actions"><button type="submit" id="saveOrder" name="action" value="save" class="primary">Lưu hóa đơn</button><button type="submit" id="saveAndPrint" name="action" value="print" class="success">Lưu và in</button></div></div>
+    </form>
+</dialog>
+
+<dialog id="productPanel" class="order-panel product-panel" aria-labelledby="productTitle">
+    <form id="productForm" novalidate>
+        <div class="panel-heading"><div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h2 id="productTitle">Thêm mặt hàng</h2><p class="order-id">Mã hàng được cấp khi lưu.</p></div><button type="button" class="icon-button" data-close-product aria-label="Đóng thêm mặt hàng">×</button></div>
+        <div class="panel-content">
+            <p id="productFormError" class="form-error" role="alert" hidden></p>
+            <div class="form-group"><label for="productName">Tên hàng <span class="required" aria-hidden="true">*</span></label><input type="text" id="productName" name="productName" placeholder="Ví dụ: Xi măng Hà Tiên" required></div>
+            <div class="form-group"><label for="productType">Loại hàng <span class="required" aria-hidden="true">*</span></label><input type="text" id="productType" name="productType" placeholder="Ví dụ: Xi măng, cát, gạch…" required></div>
+            <div class="form-group"><label for="productPrice">Giá bán <span class="required" aria-hidden="true">*</span></label><input type="text" id="productPrice" name="productPrice" inputmode="numeric" placeholder="Nhập giá bán lớn hơn 0" required></div>
+        </div>
+        <div class="btn-group"><button type="button" class="secondary" data-close-product>Đóng</button><button type="submit" id="productSave" class="primary">Lưu mặt hàng</button></div>
+    </form>
+</dialog>
+
+<dialog id="receiptPanel" class="order-panel" aria-labelledby="receiptTitle">
+    <form id="receiptForm" novalidate>
+        <div class="panel-heading"><div><p class="eyebrow">HÓA ĐƠN NHẬP HÀNG</p><h2 id="receiptTitle">Tạo hóa đơn nhập</h2><p class="order-id">Mã dự kiến: <strong id="receiptId">…</strong></p></div><button type="button" class="icon-button" data-close-receipt aria-label="Đóng hóa đơn nhập">×</button></div>
+        <div class="panel-content">
+            <p id="receiptFormError" class="form-error" role="alert" hidden></p>
+            <div class="customer-grid">
+                <div class="form-group"><label for="receiptSupplier">Nhà cung cấp <span class="required" aria-hidden="true">*</span></label><input type="text" id="receiptSupplier" name="receiptSupplier" placeholder="Tên nhà cung cấp" required></div>
+                <div class="form-group"><label for="receiptAddress">Địa chỉ</label><input type="text" id="receiptAddress" name="receiptAddress" placeholder="Địa chỉ nhà cung cấp"></div>
+            </div>
+            <section aria-labelledby="receiptItemsTitle">
+                <div class="items-heading"><h3 id="receiptItemsTitle">Hàng hóa nhập kho</h3><button type="button" id="receiptAddItem" class="text-button">＋ Thêm mặt hàng</button></div>
+                <div class="items-scroll" tabindex="0" role="region" aria-label="Các mặt hàng nhập kho, có thể cuộn ngang">
+                    <div class="item-header receipt-item-header" aria-hidden="true"><div>#</div><div>Mặt hàng</div><div>Số lượng</div><div>ĐVT</div><div>Đơn giá</div><div>Thành tiền</div><div></div></div>
+                    <div id="receiptItems"></div>
+                </div>
+            </section>
+            <div class="summary-grid receipt-summary-grid">
+                <p class="receipt-note">Chọn mặt hàng trong danh mục. Số lượng nhập sẽ được cộng vào kho sau khi lưu hóa đơn.</p>
+                <div class="summary">
+                    <p>Tổng tiền <strong id="receiptTotal">0 đ</strong></p>
+                    <div class="form-group"><label for="receiptPaid">Đã trả nhà cung cấp</label><div class="paid-input"><input type="text" id="receiptPaid" name="receiptPaid" inputmode="numeric" placeholder="0"><button type="button" id="receiptPayFull" class="secondary">Trả đủ</button></div></div>
+                    <p class="debt">Còn nợ <strong id="receiptDebt">0 đ</strong></p>
+                </div>
+            </div>
+        </div>
+        <div class="btn-group"><button type="button" class="secondary" data-close-receipt>Đóng</button><div class="save-actions"><button type="submit" id="receiptSave" name="action" value="save" class="primary">Lưu nhập kho</button><button type="submit" id="receiptSaveAndPrint" name="action" value="print" class="success">Lưu và in</button></div></div>
+    </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<section id="printArea" class="print-container" aria-label="Hóa đơn in" hidden>
+    <div class="invoice-header"><h2>VLXD MINH HÙNG</h2><p>SĐT: 0919262432</p></div>
+    <div class="invoice-info"><div>Số hóa đơn: <span id="p_id"></span></div><div id="p_date"></div></div>
+    <h1 id="p_title" class="invoice-title">HÓA ĐƠN BÁN HÀNG</h1>
+    <p><strong id="p_partyLabel">TÊN KHÁCH HÀNG:</strong> <span id="p_name"></span></p>
+    <p><strong>ĐỊA CHỈ:</strong> <span id="p_address"></span></p>
+    <table><thead><tr><th scope="col">STT</th><th scope="col">TÊN HÀNG</th><th scope="col">ĐVT</th><th scope="col">SỐ LƯỢNG</th><th scope="col">ĐƠN GIÁ</th><th scope="col">THÀNH TIỀN</th></tr></thead><tbody id="p_table"></tbody></table>
+    <table class="print-totals"><tbody><tr><th scope="row">TỔNG CỘNG</th><td id="p_total"></td></tr><tr><th scope="row" id="p_paidLabel">KHÁCH TRẢ</th><td id="p_paid"></td></tr><tr><th scope="row">NỢ LẠI</th><td id="p_debt"></td></tr></tbody></table>
+    <div class="invoice-footer"><strong id="p_footerLabel">NGƯỜI GIAO HÀNG</strong><p id="p_shipper"></p></div>
+</section>
+</body>
+</html>
