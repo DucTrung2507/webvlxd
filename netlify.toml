@@ -1,0 +1,4 @@
+[build]
+  base = "."
+  command = "mkdir -p _site && cp vlxd-minh-hung-optimized/index.html _site/ && cp -R vlxd-minh-hung-optimized/css vlxd-minh-hung-optimized/js vlxd-minh-hung-optimized/images _site/"
+  publish = "_site"
