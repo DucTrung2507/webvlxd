@@ -29,7 +29,17 @@ jobs:
         with:
           node-version: '22'
       - name: Run tests
-        run: node --test vlxd-minh-hung-optimized/tests/*.test.js
+        working-directory: vlxd-minh-hung-optimized
+        run: |
+          for test in tests/*.test.js; do
+            node - "$test" <<'NODE'
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          const context = vm.createContext({print: console.log, quit: process.exit});
+          context.load = file => vm.runInContext(fs.readFileSync(file, 'utf8'), context, {filename: file});
+          context.load(process.argv[2]);
+          NODE
+          done
       - name: Prepare website
         run: |
           mkdir -p _site
