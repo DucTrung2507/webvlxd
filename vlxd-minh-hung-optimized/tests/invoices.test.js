@@ -1,9 +1,12 @@
 /* Chạy từ thư mục dự án bằng JavaScriptCore (macOS). */
 var window = {};
 var elements = {};
+var omittedDebtPrintIds = new Set(['d_customerId', 'd_status', 'd_payments']);
+var omittedDebtPrintLookups = [];
 var domReady;
 var document = {
     getElementById: function (id) {
+        if (omittedDebtPrintIds.has(id)) { omittedDebtPrintLookups.push(id); return null; }
         if (!elements[id]) elements[id] = {
             value: '', textContent: '', innerHTML: '', hidden: false, disabled: false,
             listeners: {}, attributes: {},
@@ -258,27 +261,26 @@ async function run() {
     assert(debtPrinted,'Mở cửa sổ in công nợ tổng');
     assert(!bodyClasses.has('printing-debt'),'Kết thúc in trả lại chế độ giao diện thường');
     equal(elements.d_customer.textContent,'Khách <img src=x>','Tên khách trên phiếu nợ được gán bằng textContent');
-    equal(elements.d_customerId.textContent,'KH000001','Phiếu nợ in đúng mã khách');
+    equal(omittedDebtPrintLookups.length,0,'In tổng không truy cập mã khách, trạng thái hoặc bảng thu tiền đã bỏ');
+    assert(!elements.d_customerId&&!elements.d_status&&!elements.d_payments,'DOM mô phỏng không tự tạo lại phần bản in đã bỏ');
     equal(elements.d_phone.textContent,'0900000001','Phiếu nợ in số điện thoại');
     equal(elements.d_through.textContent,'Cập nhật đến: 05/11/2026','Phiếu nợ hiển thị ngày cập nhật của tổng đang mở');
     assert(elements.d_table.innerHTML.includes('HD&lt;img&gt;'),'Mã hóa đơn trên phiếu nợ được escape');
     assert(!elements.d_table.innerHTML.includes('HD<img>'),'Không chèn mã hóa đơn như HTML');
-    assert(elements.d_payments.innerHTML.includes('Thu &lt;svg onload=x&gt;'),'Ghi chú thu nợ khi in được escape');
+    assert(!JSON.stringify(elements).includes('Thu &lt;svg onload=x&gt;'),'Lịch sử thu tiền không được đưa vào nội dung in');
     equal(D.money(elements.d_total.textContent),350000,'Bản in tổng cộng giá trị các đơn được gộp');
     equal(D.money(elements.d_paid.textContent),120000,'Bản in đã trả gồm tiền ban đầu và các khoản thu công nợ');
     equal(D.money(elements.d_debt.textContent),230000,'Phiếu tổng hiển thị dư nợ hiệu lực');
-    equal(elements.d_status.textContent,'CHƯA TẤT TOÁN','Phiếu còn nợ giữ trạng thái mở');
     window.print=function () {};
     app.Print.printStatement({...statement,paid:300000,debt:0,status:'closed',payments:[]});
-    equal(elements.d_status.textContent,'ĐÃ TẤT TOÁN','Phiếu trả đủ in trạng thái kết thúc');
     equal(D.money(elements.d_debt.textContent),0,'Phiếu tất toán không còn nợ');
-    assert(elements.d_payments.innerHTML.includes('Chưa ghi nhận'),'Phiếu không có lịch sử thu không giữ dữ liệu lần in trước');
+    equal(omittedDebtPrintLookups.length,0,'Bản in đã tất toán vẫn hoạt động khi DOM không có trạng thái và lịch sử thu');
     app.Print.printStatement({...statement,total:1000.75,paid:1000.5,debt:0.25,
         items:[{orderId:'HD1',date:'2026-11-04',total:1000.75,paid:0.5,debt:1000.25}],
         payments:[{id:'TT1',date:'2026-11-04',amount:1000.5,note:''}]});
     equal(D.money(elements.d_debt.textContent),0.25,'In công nợ giữ số dư lẻ từ dữ liệu cũ');
     assert(elements.d_table.innerHTML.includes('1.000,75 đ'),'Các dòng phiếu công nợ không làm tròn tiền lẻ');
-    assert(elements.d_payments.innerHTML.includes('1.000,5 đ'),'Lịch sử thu trên bản in giữ tiền lẻ');
+    equal(D.money(elements.d_paid.textContent),1001,'Tổng đã trả vẫn cộng tiền thu dù không in bảng lịch sử');
     window.print=function () { throw new Error('Máy in không sẵn sàng'); };
     expectThrow(function () { app.Print.printStatement(statement); },'Lỗi in vẫn được báo về giao diện');
     assert(!bodyClasses.has('printing-debt'),'Lỗi in không để lại chế độ phiếu nợ');

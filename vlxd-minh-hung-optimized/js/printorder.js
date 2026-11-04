@@ -28,11 +28,13 @@
         const paid = statement.items.reduce((sum, item) => sum + money(item.paid), money(statement.paid));
         const fields = {d_id: statement.id, d_date: 'Ngày lập: ' + formatDate(parseDate(statement.date)),
             d_through: 'Cập nhật đến: ' + formatDate(parseDate(statement.throughDate)),
-            d_customer: customer.name || statement.customerName || '', d_customerId: statement.customerId || customer.id || '',
+            d_customer: customer.name || statement.customerName || '',
             d_phone: customer.phone || '', d_address: customer.address || '',
-            d_total: statementMoney(total), d_paid: statementMoney(paid), d_debt: statementMoney(statement.debt),
-            d_status: statement.status === 'closed' ? 'ĐÃ TẤT TOÁN' : 'CHƯA TẤT TOÁN'};
-        Object.entries(fields).forEach(([id, value]) => { document.getElementById(id).textContent = value; });
+            d_total: statementMoney(total), d_paid: statementMoney(paid), d_debt: statementMoney(statement.debt)};
+        Object.entries(fields).forEach(([id, value]) => {
+            const field = document.getElementById(id);
+            if (field) field.textContent = value;
+        });
         const groups = new Map();
         statement.items.forEach(item => {
             const date = parseDate(item.date, item.orderId);
@@ -49,10 +51,6 @@
             ${index === 0 ? `<td rowspan="${goods.length}" class="debt-date">${html(formatDate(date))}</td>` : ''}
             <td>${html(good.name)}</td><td>${html(quantity(good.qty))}</td><td>${html(good.unit || '—')}</td>
             <td>${good.price == null ? '—' : html(statementMoney(good.price))}</td><td>${html(statementMoney(good.subtotal))}</td></tr>`).join('')).join('');
-        document.getElementById('d_payments').innerHTML = (statement.payments || []).map(payment => `<tr>
-            <td>${html(payment.id)}</td><td>${html(formatDate(parseDate(payment.date)))}</td>
-            <td>${html(statementMoney(payment.amount))}</td><td>${html(payment.note || '')}</td></tr>`).join('') ||
-            '<tr><td colspan="4">Chưa ghi nhận thanh toán.</td></tr>';
         document.body.classList.add('printing-debt');
         try { window.print(); }
         finally { document.body.classList.remove('printing-debt'); }
