@@ -1,6 +1,6 @@
 **Luồng sử dụng và cách hoạt động kỹ thuật của website VLXD Minh Hùng**
 
-Tài liệu đối chiếu với mã nguồn và Apps Script phiên bản 12 đã triển khai ngày 04/11/2026: nhiều đơn vị tính, quy đổi tồn kho và mặt hàng chờ hoàn thiện. API kho đã xác nhận schemaVersion 2 và API lịch sử hoạt động. Các giới hạn và trường hợp lỗi được ghi cùng luồng sử dụng.
+Tài liệu đối chiếu với mã nguồn và Apps Script phiên bản 13 đã triển khai ngày 04/11/2026: nhiều đơn vị tính, quy đổi tồn kho và mặt hàng chờ hoàn thiện. API kho đã xác nhận schemaVersion 2 và API lịch sử hoạt động. Các giới hạn và trường hợp lỗi được ghi cùng luồng sử dụng.
 
 **1. Kiến trúc tổng thể.** Hệ thống gồm giao diện HTML/CSS/JavaScript chạy trong trình duyệt, Google Apps Script xử lý nghiệp vụ và Google Sheets lưu dữ liệu. Live Server tại cổng 5500 chỉ phục vụ các tệp giao diện trên máy; việc lưu hóa đơn thực hiện trên Google.
 
@@ -495,7 +495,7 @@ Một số lỗi đọc chung có thể chặn cả lần tải, không chỉ b�
 | HTML/CSS/JS | GitHub Pages/Netlify triển khai từ Git, hoặc Live Server phục vụ tệp cục bộ; trình duyệt cần tải lại |
 | Apps Script | Cập nhật nội dung dự án, tạo version và cập nhật deployment đang dùng |
 
-Đã triển khai Apps Script 12 ngày 04/11/2026: sao lưu mã phiên bản 11, giữ manifest/quyền hiện có và cập nhật deployment cũ để giữ URL. Đã xác nhận API kho trả schemaVersion 2 và API lịch sử hoạt động. Bản sao mã không phải bản sao dữ liệu Sheet; việc kiểm tra chỉ đọc dữ liệu thật, không lập chứng từ thử.
+Đã triển khai Apps Script 13 ngày 04/11/2026: sao lưu mã phiên bản 11 và 12, giữ manifest/quyền hiện có và cập nhật deployment cũ để giữ URL. Đã xác nhận API kho trả schemaVersion 2 và API lịch sử hoạt động. Bản sao mã không phải bản sao dữ liệu Sheet; việc kiểm tra chỉ đọc dữ liệu thật, không lập chứng từ thử.
 
 Chỉ sửa file .gs trên máy không thay đổi Google; chỉ lưu mã trong trình chỉnh sửa Google chưa đổi version mà /exec đang trỏ tới. Các nút IN chạy mã đã lưu trong dự án, nên có thể dùng bản HEAD mới hơn bản web nếu chưa cập nhật deployment.
 
@@ -533,7 +533,7 @@ Các tệp apps-script-mocks.js và ui-dom-fixture.js cung cấp Sheet/DOM giả
 | Tự động hóa | Đồng bộ thời gian thực, lưu ngoại tuyến, tự dọn dòng lỗi, sao lưu Sheet định kỳ |
 | Hóa đơn | Kết nối nhà cung cấp hóa đơn điện tử, thuế/VAT/chiết khấu/phí vận chuyển riêng |
 
-Đọc lịch sử và tính tồn hiện quét toàn bộ vùng dữ liệu Sheet; chưa có phân trang, chỉ mục, cache tồn hoặc bộ tổng hợp tăng dần. Nhiều dòng hơn dẫn đến nhiều dữ liệu tải/DOM và thời gian giữ khóa hơn. Các giới hạn dung lượng/thời gian của dịch vụ Google cũng có thể ảnh hưởng vận hành; mã hiện chưa tách tác vụ lớn thành hàng đợi.
+GET kho đọc HOADON và CHITIET_HD mỗi tab một lần, không tăng số lần đọc theo số mặt hàng. Đọc lịch sử và tính tồn hiện quét toàn bộ vùng dữ liệu Sheet; chưa có phân trang, chỉ mục, cache tồn hoặc bộ tổng hợp tăng dần. Nhiều dòng hơn dẫn đến nhiều dữ liệu tải/DOM và thời gian giữ khóa hơn. Các giới hạn dung lượng/thời gian của dịch vụ Google cũng có thể ảnh hưởng vận hành; mã hiện chưa tách tác vụ lớn thành hàng đợi.
 
 Sửa/xóa trực tiếp các dòng Sheet có thể làm số liệu thay đổi, làm mất liên kết hoặc tạo tồn âm; các kiểm tra trước khi lưu từ ứng dụng không tự sửa được dữ liệu thủ công không nhất quán. Bộ đọc bán cũ chưa loại hết trường hợp mã tổng trùng. Bộ sinh mã SP chỉ quét MATHANG hiện có: nếu xóa tay mã lớn nhất, mã đó có thể được cấp lại cho mặt hàng khác và ảnh hưởng liên kết chứng từ cũ; chưa có quy trình xóa sản phẩm an toàn trên ứng dụng.
 

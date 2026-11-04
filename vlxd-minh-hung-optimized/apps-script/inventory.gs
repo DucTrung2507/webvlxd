@@ -166,13 +166,23 @@ function inventoryBaseQuantityUnits_(product, unit, qty) {
   return inventoryQuantityUnits_(inventoryQuantity_(qty) * configured.factor);
 }
 
-function inventoryStockUnits_(ss, products, receipts) {
-  const balances = new Map();
+function inventoryCommittedSales_(ss) {
+  const hd = ss.getSheetByName(SHEET_HD), ct = ss.getSheetByName(SHEET_CT);
+  if (!hd || !ct) return [];
+  const committed = new Set(invoiceRows_(hd).map(function (row) { return String(row[0] || "").trim(); }));
+  return invoiceRows_(ct).filter(function (row) {
+    return String(row[6] || "").trim() && committed.has(String(row[0] || "").trim());
+  });
+}
+
+function inventoryStockUnits_(ss, products, receipts, sales) {
+  const balances = new Map(), touched = new Set();
   const byId = new Map(products.map(function (product) { return [product.id, product]; }));
   function apply(id, unit, qty, direction) {
     const product = byId.get(id);
     if (!product) throw new Error("Chứng từ kho tham chiếu mã mặt hàng không còn trong danh mục: " + id);
     unit = String(unit || "").trim() || product.legacyUnit || "";
+    touched.add(id);
     const key = inventoryStockKey_(id, product.status === "active" ? product.baseUnit : unit);
     const units = qty === 0 ? 0 : inventoryBaseQuantityUnits_(product, unit, qty) * direction;
     balances.set(key, inventoryAddUnits_(balances.get(key) || 0, units));
@@ -181,48 +191,47 @@ function inventoryStockUnits_(ss, products, receipts) {
   receipts.forEach(function (receipt) {
     receipt.items.forEach(function (item) { apply(item.productId, item.unit, item.qty, 1); });
   });
-  const hd = ss.getSheetByName(SHEET_HD), ct = ss.getSheetByName(SHEET_CT);
-  if (hd && ct) {
-    const committed = new Set(invoiceRows_(hd).map(function (row) { return String(row[0] || "").trim(); }));
-    invoiceRows_(ct).forEach(function (row) {
-      const productId = String(row[6] || "").trim();
-      if (productId && committed.has(String(row[0] || "").trim())) apply(productId, row[3], row[2], -1);
-    });
-  }
+  (sales || inventoryCommittedSales_(ss)).forEach(function (row) {
+    apply(String(row[6] || "").trim(), row[3], row[2], -1);
+  });
   products.forEach(function (product) {
-    if (!Array.from(balances.keys()).some(function (key) { return JSON.parse(key)[0] === product.id; })) apply(product.id, "", 0, 1);
+    if (!touched.has(product.id)) apply(product.id, "", 0, 1);
   });
   return balances;
 }
 
-function inventoryStock_(ss, products, receipts) {
-  const balances = inventoryStockUnits_(ss, products, receipts);
+function inventoryStock_(ss, products, receipts, sales) {
+  const balances = inventoryStockUnits_(ss, products, receipts, sales);
+  const byId = new Map(products.map(function (product) { return [product.id, product]; }));
+  const receivedNames = new Map();
+  receipts.forEach(function (receipt) { receipt.items.forEach(function (item) {
+    const key = inventoryStockKey_(item.productId, item.unit);
+    if (!receivedNames.has(key)) receivedNames.set(key, item.unit);
+  }); });
   return Array.from(balances.entries()).map(function (entry) {
-    const parts = JSON.parse(entry[0]), product = products.find(function (p) { return p.id === parts[0]; });
-    const received = receipts.reduce(function (all, receipt) { return all.concat(receipt.items); }, [])
-      .find(function (item) { return item.productId === product.id && inventoryName_(item.unit) === parts[1]; });
-    return {productId: product.id, name: product.name, unit: product.status === "active" ? product.baseUnit : received ? received.unit : parts[1],
+    const parts = JSON.parse(entry[0]), product = byId.get(parts[0]);
+    return {productId: product.id, name: product.name,
+      unit: product.status === "active" ? product.baseUnit : receivedNames.has(entry[0]) ? receivedNames.get(entry[0]) : parts[1],
       qty: entry[1] / INVENTORY_QTY_SCALE};
   });
 }
 
 function inventoryGet_(ss) {
   ss = ss || SpreadsheetApp.openById(SPREADSHEET_ID);
-  const products = inventoryProducts_(ss), receipts = inventoryReceipts_(ss);
+  const products = inventoryProducts_(ss), receipts = inventoryReceipts_(ss), sales = inventoryCommittedSales_(ss);
+  const unitsById = new Map();
+  function rememberUnit(id, unit) {
+    if (!unitsById.has(id)) unitsById.set(id, new Set());
+    unitsById.get(id).add(String(unit || ""));
+  }
+  receipts.forEach(function (receipt) { receipt.items.forEach(function (item) { rememberUnit(item.productId, item.unit); }); });
+  sales.forEach(function (row) { rememberUnit(String(row[6] || "").trim(), row[3]); });
   products.forEach(function (product) {
-    const units = new Set();
-    receipts.forEach(function (receipt) { receipt.items.forEach(function (item) {
-      if (item.productId === product.id) units.add(item.unit);
-    }); });
-    const hd = ss.getSheetByName(SHEET_HD), ct = ss.getSheetByName(SHEET_CT);
-    if (hd && ct) {
-      const committed = new Set(invoiceRows_(hd).map(function (row) { return String(row[0] || "").trim(); }));
-      invoiceRows_(ct).forEach(function (row) { if (String(row[6] || "") === product.id && committed.has(String(row[0] || ""))) units.add(String(row[3] || "")); });
-    }
+    const units = unitsById.get(product.id) || new Set();
     product.receivedUnits = Array.from(units);
     product.requiresLegacyUnit = units.has("") && !product.legacyUnit;
   });
-  return {schemaVersion: 2, products: products, receipts: receipts, stock: inventoryStock_(ss, products, receipts),
+  return {schemaVersion: 2, products: products, receipts: receipts, stock: inventoryStock_(ss, products, receipts, sales),
     lastReceiptId: receipts.length ? receipts[receipts.length - 1].id : ""};
 }
 

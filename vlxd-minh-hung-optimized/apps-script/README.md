@@ -1,6 +1,6 @@
 # Hóa đơn, danh mục mặt hàng và nhập kho
 
-Đã triển khai Apps Script **phiên bản 12 ngày 04/11/2026**: mặt hàng có nhiều đơn vị tính, giá bán và hệ số quy đổi; hàng nhập mới chờ hoàn thiện trước khi bán. Đã kiểm tra API kho trả `schemaVersion: 2` và API lịch sử hoạt động trên URL hiện có. Mặt hàng cũ chưa khai báo ĐVT cần được hoàn thiện tại Kho trước khi bán.
+Đã triển khai Apps Script **phiên bản 13 ngày 04/11/2026**: mặt hàng có nhiều đơn vị tính, giá bán và hệ số quy đổi; hàng nhập mới chờ hoàn thiện trước khi bán. Đã kiểm tra API kho trả `schemaVersion: 2` và API lịch sử hoạt động trên URL hiện có. Mặt hàng cũ chưa khai báo ĐVT cần được hoàn thiện tại Kho trước khi bán.
 
 Mô tả đầy đủ luồng sử dụng, dữ liệu, API, cơ chế tính tồn, xử lý lỗi và giới hạn hiện tại: [Luồng web và kỹ thuật](../docs/LUONG-WEB-VA-KY-THUAT.md).
 

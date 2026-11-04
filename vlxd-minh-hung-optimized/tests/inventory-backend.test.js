@@ -343,4 +343,29 @@ function runCatalogConversions() {
     print('PASS: '+checks+' inventory checks including pending catalog and unit conversions');
 }
 
-try {runInventory();runInventoryRegressions();runCatalogConversions();} catch(error){print('FAIL: '+error.message+'\n'+error.stack);quit(1);}
+function runInventoryReadScaling() {
+    resetInventory();
+    var a=success(post(product('Hàng kiểm tra số lần đọc','read-scaling-create')),'Tạo mặt hàng kiểm tra đọc').product;
+    success(post({action:'receiveStock',requestId:'read-scaling-receipt',date:'2026-11-03',supplier:'NCC',paid:0,
+        items:[{productId:a.id,qty:5,unit:'bao',price:100000}]}),'Nhập hàng kiểm tra đọc');
+    success(post(sale(a.id,'read-scaling-sale',1)),'Bán hàng kiểm tra đọc');
+    function readCounts() {
+        mock.reads=[];
+        var data=getInventory(), counts={};
+        mock.reads.forEach(function (read) { counts[read.sheet]=(counts[read.sheet]||0)+1; });
+        return {data:data,counts:counts};
+    }
+    var one=readCounts();
+    for(var i=2;i<=40;i++) mock.sheets.MATHANG.rows.push(['SP'+String(i).padStart(6,'0'),'Hàng '+i,'Vật liệu',100000,'','',
+        JSON.stringify([{unit:'bao',price:100000,factor:1}]),'active','','bao']);
+    var many=readCounts();
+    equal(many.data.products.length,40,'Đọc danh mục lớn đủ mặt hàng');
+    equal(JSON.stringify(many.counts),JSON.stringify(one.counts),'Số lần đọc từng Sheet không tăng theo số mặt hàng');
+    equal(many.counts.HOADON,1,'GET kho chỉ đọc HOADON một lần');
+    equal(many.counts.CHITIET_HD,1,'GET kho chỉ đọc CHITIET_HD một lần');
+    equal(qty(many.data,a.id),4,'Tối ưu đọc vẫn cộng nhập và trừ bán đúng');
+    equal(many.data.products[0].receivedUnits.join(','),'bao','Đơn vị lịch sử vẫn được lập chỉ mục đúng');
+    print('PASS: '+checks+' inventory checks including constant Sheet read count');
+}
+
+try {runInventory();runInventoryRegressions();runCatalogConversions();runInventoryReadScaling();} catch(error){print('FAIL: '+error.message+'\n'+error.stack);quit(1);}
