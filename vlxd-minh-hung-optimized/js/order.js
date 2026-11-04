@@ -26,8 +26,8 @@
         row.className = 'item';
         row.innerHTML = `<div class="stt"></div>
             <input class="name" type="text" list="productOptions" placeholder="Chọn mặt hàng đã tạo" aria-label="Tên hàng" autocomplete="off">
-            <input class="qty" type="number" value="1" min="0.000001" step="0.000001" aria-label="Số lượng">
-            <input class="unit" type="text" placeholder="bao, m³…" aria-label="Đơn vị tính">
+            <input class="qty" type="number" value="1" min="0" step="1" aria-label="Số lượng">
+            <select class="unit" aria-label="Đơn vị tính" required><option value="">Chọn ĐVT</option></select>
             <input class="price" type="text" inputmode="numeric" placeholder="0" aria-label="Đơn giá">
             <div class="subtotal">0 đ</div>
             <button type="button" data-delete-item aria-label="Xóa mặt hàng">×</button>`;
@@ -61,6 +61,40 @@
         input.value = digits ? Number(digits).toLocaleString('vi-VN') : '';
     }
 
+    function productUnits(product) {
+        return product && Array.isArray(product.units) ? product.units : [];
+    }
+
+    function selectProduct(row, product) {
+        const previous = row.getAttribute('data-product-id');
+        if (product && previous === product.id) return;
+        const unit = row.querySelector('.unit');
+        const units = productUnits(product);
+        unit.innerHTML = '<option value="">Chọn ĐVT</option>' + units.map(item =>
+            `<option value="${app.Data.escapeHtml(item.unit)}">${app.Data.escapeHtml(item.unit)}</option>`).join('');
+        unit.value = units.length ? units[0].unit : '';
+        row.querySelector('.price').value = units.length ? money(units[0].price).toLocaleString('vi-VN') : '';
+        row.setAttribute('data-product-id', product ? product.id : '');
+    }
+
+    function updateItem(event) {
+        if (saving) return;
+        event.target.removeAttribute('aria-invalid');
+        get('paid').value = '';
+        if (event.target.matches('.price')) formatInput(event.target);
+        if (event.target.matches('.name')) {
+            if (app.Inventory) selectProduct(event.target.closest('.item'), app.Inventory.resolveProduct(event.target.value));
+            syncItemRows();
+        }
+        if (event.target.matches('.unit') && app.Inventory) {
+            const row = event.target.closest('.item');
+            const product = app.Inventory.resolveProduct(row.querySelector('.name').value);
+            const variant = productUnits(product).find(item => item.unit === event.target.value);
+            row.querySelector('.price').value = variant ? money(variant.price).toLocaleString('vi-VN') : '';
+        }
+        totals();
+    }
+
     function totals() {
         let total = 0;
         rows().forEach(row => {
@@ -78,7 +112,7 @@
     function setBusy(value) {
         saving = value;
         get('createForm').setAttribute('aria-busy', String(value));
-        get('createForm').querySelectorAll('input, button').forEach(control => { control.disabled = value; });
+        get('createForm').querySelectorAll('input, select, button').forEach(control => { control.disabled = value; });
         get('saveOrder').disabled = value || !ready;
         get('saveAndPrint').disabled = value || !ready;
         get('saveOrder').textContent = value ? 'Đang lưu…' : 'Lưu hóa đơn';
@@ -141,8 +175,12 @@
         filled.forEach(row => {
             const name = row.querySelector('.name');
             const qty = row.querySelector('.qty');
+            const unit = row.querySelector('.unit');
             const price = row.querySelector('.price');
-            if (app.Inventory && !app.Inventory.resolveProduct(name.value)) fail(name, 'Chọn mặt hàng có trong danh mục. Nếu là hàng mới, hãy tạo trong Mặt hàng trước.');
+            const product = app.Inventory && app.Inventory.resolveProduct(name.value);
+            if (app.Inventory && (!product || product.status === 'pending' || !productUnits(product).length)) fail(name, 'Chọn mặt hàng đã cập nhật đầy đủ thông tin trong danh mục. Hàng mới nhập kho cần hoàn thiện trước khi bán.');
+            if (!unit.value.trim()) fail(unit, 'Vui lòng chọn đơn vị tính cho từng mặt hàng.');
+            else if (product && !productUnits(product).some(item => item.unit === unit.value)) fail(unit, 'Chọn đơn vị tính đã cấu hình cho mặt hàng.');
             if (!Number.isFinite(Number(qty.value)) || Number(qty.value) <= 0) fail(qty, 'Số lượng phải lớn hơn 0.');
             if (!Number.isFinite(money(price.value)) || money(price.value) <= 0) fail(price, 'Đơn giá phải lớn hơn 0.');
         });
@@ -208,21 +246,14 @@
             totals();
             rows().at(-1).querySelector('.name').focus();
         });
-        get('items').addEventListener('input', event => {
-            event.target.removeAttribute('aria-invalid');
-            if (event.target.matches('.price')) formatInput(event.target);
-            if (event.target.matches('.name')) {
-                if (app.Inventory) {
-                    const row = event.target.closest('.item');
-                    const product = app.Inventory.resolveProduct(event.target.value);
-                    if (product && row.getAttribute('data-product-id') !== product.id) {
-                        row.querySelector('.price').value = money(product.price).toLocaleString('vi-VN');
-                    } else if (!event.target.value.trim()) row.querySelector('.price').value = '';
-                    row.setAttribute('data-product-id', product ? product.id : '');
-                }
-                syncItemRows();
-            }
-            totals();
+        get('items').addEventListener('input', updateItem);
+        get('items').addEventListener('change', updateItem);
+        get('items').addEventListener('keydown', event => {
+            if (saving || !event.target.matches('.qty') || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            event.preventDefault();
+            const current = Number(event.target.value) || 0;
+            event.target.value = String(Math.max(0, event.key === 'ArrowUp' ? Math.floor(current) + 1 : Math.ceil(current) - 1));
+            updateItem(event);
         });
         get('items').addEventListener('click', event => {
             const button = event.target.closest('[data-delete-item]');
@@ -231,6 +262,7 @@
             const index = rows().indexOf(row);
             row.remove();
             syncItemRows();
+            get('paid').value = '';
             totals();
             const remaining = rows();
             remaining[Math.min(index, remaining.length - 1)].querySelector('.name').focus();

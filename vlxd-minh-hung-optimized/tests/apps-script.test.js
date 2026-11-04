@@ -7,7 +7,14 @@ load('apps-script/soHD.gs');
 var hdHeader = ['ID', 'Ngày', 'Khách hàng', 'Địa chỉ', 'Tổng', 'Khách trả', 'Công nợ', 'Nhân viên giao'];
 var ctHeader = ['ID', 'Tên hàng', 'Số lượng', 'ĐVT', 'Đơn giá', 'Thành tiền'];
 function reset(hd, ct) {
-    mock.sheets = {HOADON: new FakeSheet('HOADON', hd), CHITIET_HD: new FakeSheet('CHITIET_HD', ct)};
+    mock.sheets = {HOADON: new FakeSheet('HOADON', hd), CHITIET_HD: new FakeSheet('CHITIET_HD', ct),
+        MATHANG: new FakeSheet('MATHANG', [
+            ['productId','name','type','price','requestId','requestHash','units','status','legacyUnit','baseUnit'],
+            ['SP000001','Xi măng','Vật liệu',90000,'','',JSON.stringify([{unit:'bao',price:90000,factor:1}]),'active','','bao']
+        ]),
+        NHAPKHO: new FakeSheet('NHAPKHO', [['id','date','supplier','address','total','paid','debt','requestId','requestHash'],['NK010120260001','2026-01-01','NCC','',900000000,0,900000000,'','']]),
+        CT_NHAPKHO: new FakeSheet('CT_NHAPKHO', [['receiptId','productId','name','qty','unit','price','subtotal'],['NK010120260001','SP000001','Xi măng',10000,'bao',90000,900000000]])
+    };
     mock.writes = 0; mock.held = false; mock.acquires = 0; mock.releases = 0; mock.failWrite = ''; mock.reads = []; mock.alerts = []; mock.dialogs = [];
 }
 function result(output) {
@@ -177,9 +184,9 @@ function run() {
     equal(inHeader[0], 'HD031120260020', 'Lưu số IN đã hiển thị và chưa trùng');
     equal(inHeader[2], 'Khách nhập từ Sheet', 'Lưu tên khách từ đúng C8');
     equal(inHeader[7], 'Anh Giao', 'Lưu nhân viên từ đúng E32');
-    equal(inDetail.length, 6, 'Lưu từ IN nay dùng thống nhất 6 cột');
+    equal(inDetail.length, 7, 'Lưu từ IN dùng cột productId theo dõi tồn');
     equal(inDetail[0], inHeader[0], 'Chi tiết từ IN cùng mã hóa đơn');
-    equal(inDetail[3], '', 'IN chưa có ô ĐVT nên để trống cột D');
+    equal(inDetail[3], 'bao', 'IN chỉ tự chọn ĐVT khi danh mục có đúng một đơn vị');
     equal(inDetail[4], 90000, 'Giá từ F12 đúng cột E dữ liệu');
     equal(inDetail[5], 180000, 'Thành tiền từ G12 đúng cột F dữ liệu');
     assert(mock.alerts.length > 0, 'Lưu IN vẫn thông báo kết quả');

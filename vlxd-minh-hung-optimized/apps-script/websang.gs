@@ -157,6 +157,7 @@ function invoiceValidate_(data) {
     const qty = Number(String(item.qty == null ? "" : item.qty).replace(",", "."));
     const price = invoiceNumber_(item.price, "Đơn giá");
     const productId = String(item.productId || "").trim();
+    if (!String(item.unit || "").trim()) throw new Error("Vui lòng nhập đơn vị tính cho mỗi mặt hàng.");
     if ((!name && !productId) || !Number.isFinite(qty) || qty <= 0 || price <= 0) {
       throw new Error("Mỗi mặt hàng cần tên, số lượng và đơn giá lớn hơn 0.");
     }

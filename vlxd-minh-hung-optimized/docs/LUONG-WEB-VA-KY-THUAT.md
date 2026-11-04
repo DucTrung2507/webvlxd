@@ -1,6 +1,6 @@
 **Luồng sử dụng và cách hoạt động kỹ thuật của website VLXD Minh Hùng**
 
-Tài liệu đối chiếu với mã nguồn hiện tại và bản Apps Script 11 đã triển khai ngày 03/11/2026. Đây là mô tả những gì hệ thống đang thực hiện, gồm cả giới hạn và các trường hợp lỗi; các chức năng chưa có được ghi riêng để tránh hiểu nhầm.
+Tài liệu đối chiếu với mã nguồn và Apps Script phiên bản 12 đã triển khai ngày 04/11/2026: nhiều đơn vị tính, quy đổi tồn kho và mặt hàng chờ hoàn thiện. API kho đã xác nhận schemaVersion 2 và API lịch sử hoạt động. Các giới hạn và trường hợp lỗi được ghi cùng luồng sử dụng.
 
 **1. Kiến trúc tổng thể.** Hệ thống gồm giao diện HTML/CSS/JavaScript chạy trong trình duyệt, Google Apps Script xử lý nghiệp vụ và Google Sheets lưu dữ liệu. Live Server tại cổng 5500 chỉ phục vụ các tệp giao diện trên máy; việc lưu hóa đơn thực hiện trên Google.
 
@@ -75,28 +75,33 @@ Hóa đơn xếp ngày mới nhất trước; cùng ngày thì so mã theo thứ
 
 Bốn thống kê được tính lại từ các hóa đơn đang hiện, không phải luôn từ toàn bộ dữ liệu. Công nợ âm được cộng đúng dấu. Lọc lịch sử bán không thay đổi tồn kho và không lọc bảng phiếu nhập.
 
-**7. Tạo mặt hàng.** Vào Mặt hàng → Thêm mặt hàng. Biểu mẫu cần tên, loại và giá bán lớn hơn 0. Loại là văn bản tự nhập; chưa có danh mục loại riêng.
+**7. Tạo và cập nhật mặt hàng.** Vào Mặt hàng → Thêm mặt hàng. Biểu mẫu cần tên, loại, đơn vị tính gốc và bảng các ĐVT. Mỗi ĐVT có giá bán lớn hơn 0 và hệ số quy đổi dương; ĐVT gốc cũng phải có giá và hệ số bằng 1. Loại và đơn vị là văn bản tự nhập; chưa có danh mục loại/đơn vị dùng chung.
 
 Mã sản phẩm do máy chủ cấp, ví dụ SP000001. Người dùng không nhập mã. Tên được bỏ khoảng trắng thừa, chuẩn hóa Unicode NFC và so sánh không phân biệt hoa/thường; tên trùng bị từ chối dù loại khác. Việc so sánh này không bỏ dấu tiếng Việt.
 
-Sau khi lưu, máy chủ trả mặt hàng chính thức; giao diện thêm hoặc thay theo mã, thêm dòng tồn 0 nếu cần, đóng biểu mẫu, báo thành công và tải lại dữ liệu Google. Tạo mặt hàng chưa làm phát sinh tồn kho.
+Ví dụ ĐVT gốc là kg, khai báo kg giá 2.500, hệ số 1; bao giá 100.000, hệ số 50. Giao diện hỗ trợ nhân hoặc chia với đơn vị gốc: “bao, Nhân, 50” là 1 bao = 50 kg; “g, Chia, 1.000” là 1 g = 0,001 kg. API lưu `factor` là hệ số nhân cuối cùng.
 
-Danh mục hiện chỉ có tạo và xem. Giá lưu ở MATHANG là giá gợi ý; mỗi lần nhập/bán vẫn có thể sửa giá trên dòng chứng từ.
+Sau khi lưu, máy chủ trả mặt hàng chính thức, giao diện cập nhật theo mã, đóng biểu mẫu và tải lại Google. Tạo danh mục chưa làm phát sinh tồn. Nút Cập nhật cho phép sửa tên, loại, giá hoặc thêm ĐVT. Sau khi hàng hoàn thiện đã có nhập/xuất, máy chủ chặn đổi ĐVT gốc, ánh xạ ĐVT cũ, xóa ĐVT và đổi hệ số để bảo toàn lịch sử. Giá danh mục theo từng ĐVT là gợi ý; giá trên chứng từ vẫn sửa được.
 
-**8. Màn hình Kho.** Có nút Làm mới và Nhập kho. Hai khung cùng cấp:
+**8. Màn hình Kho.** Có nút Làm mới và Nhập kho, với khung hóa đơn lớn và hai khung nhỏ bên cạnh:
 
 | Khung | Nội dung |
 | --- | --- |
 | Hóa đơn nhập, khung lớn | Mã NK, ngày, nhà cung cấp, địa chỉ, mặt hàng, tổng tiền, đã trả, còn nợ |
-| Số lượng hàng trong kho, khung nhỏ | Mã sản phẩm, tên sản phẩm, số lượng còn lại |
+| Chờ hoàn thiện mặt hàng | Các tên hàng mới nhập/cũ thiếu thông tin, mã SP và nút Hoàn thiện |
+| Số lượng hàng trong kho | Mã sản phẩm, tên sản phẩm, ĐVT và số lượng còn lại |
 
-Phiếu nhập xếp mới nhất trước; bấm mở chi tiết để xem hàng. Mã NK là nút có thể bấm để in lại. Bảng tồn có cả mặt hàng tồn bằng 0, không chỉ mặt hàng đang còn hàng. Con số đếm mặt hàng là số dòng sản phẩm, không phải tổng số lượng các đơn vị hàng.
+Phiếu nhập xếp mới nhất trước; bấm mở chi tiết để xem hàng. Mã NK bấm được để in lại. Bảng tồn có cả hàng bằng 0; số đếm là số mã sản phẩm riêng biệt, không phải tổng số lượng hoặc số dòng ĐVT. Hàng hoàn thiện có một dòng tồn theo ĐVT gốc; hàng chờ có thể có nhiều dòng theo ĐVT nhập.
+
+Hàng chờ chưa xuất hiện trong danh sách mặt hàng bán được. Bấm Hoàn thiện để bổ sung loại, đơn vị gốc, giá bán và quy đổi cho mọi ĐVT đã nhập/xuất. Hoàn thiện giữ nguyên mã SP và phiếu cũ, rồi tính tồn theo quy đổi. Danh mục cũ chưa có ĐVT cũng vào khung này. Nếu lịch sử có dòng không ghi ĐVT, phải chỉ rõ ĐVT áp dụng qua `legacyUnit`, không tự ghi sửa chứng từ cũ.
 
 Kho mới không lấy số dư từ các tab cũ KHO, NHAPHANG, TKNHAPHANG. Nguồn tồn mới là chứng từ ở NHAPKHO/CT_NHAPKHO và hóa đơn bán có productId.
 
-**9. Lập phiếu nhập.** Cần có ít nhất một mặt hàng trong danh mục. Biểu mẫu có mã dự kiến, nhà cung cấp bắt buộc, địa chỉ tùy chọn, các dòng hàng, tổng tiền, đã trả và công nợ.
+**9. Lập phiếu nhập.** Có thể nhập cả khi danh mục rỗng. Biểu mẫu có mã dự kiến, nhà cung cấp bắt buộc, địa chỉ tùy chọn, các dòng hàng, tổng tiền, đã trả và công nợ.
 
-Mỗi dòng gồm sản phẩm, số lượng, đơn vị tính, đơn giá nhập và thành tiền. Sản phẩm được chọn bằng select; giá danh mục tự điền và có thể sửa thành giá nhập thực tế. Số lượng ban đầu là 1; đơn vị tính là văn bản tự nhập.
+Mỗi dòng gồm tên/mã sản phẩm, số lượng, ĐVT bắt buộc, đơn giá nhập và thành tiền. Ô sản phẩm dùng datalist, nhận hàng có sẵn hoặc tên tự nhập. Hàng có sẵn được gợi ý ĐVT/giá, có thể sửa thành giá nhập thực tế. Với hàng đã hoàn thiện, ĐVT phải nằm trong danh mục; muốn nhập theo ĐVT mới phải khai báo quy đổi trước. Số lượng ban đầu là 1; ĐVT nhập là văn bản.
+
+Tên mới được chuẩn hóa, cấp mã SP và ghi `pending`; cùng tên trong nhiều dòng chỉ tạo một mã. Giá nhập không được dùng làm giá bán. Lưu phiếu vẫn ghi nhận lượng hàng và đưa tên mới vào khung chờ để hoàn thiện trước khi bán.
 
 Ngày và requestId được ghi nhận lúc mở biểu mẫu. Nút Trả đủ lấy tổng hiện tại điền vào ô đã trả. Lưu nhập kho chỉ lưu; Lưu và in lưu thành công rồi mới gọi in.
 
@@ -111,14 +116,17 @@ Máy chủ kiểm tra danh mục, nhà cung cấp, ngày, số lượng, giá, s
 | Địa chỉ | Tùy chọn |
 | Các dòng hàng | Ít nhất một dòng hợp lệ |
 | Nhân viên giao hàng | Tùy chọn |
-| Khách trả | Mặc định 0 |
+| ĐVT từng dòng | Bắt buộc, chọn trong các ĐVT của mặt hàng |
+| Khách trả | Bỏ trống được tính là 0; tự trống lại khi sửa chi tiết hàng hóa |
 | Tổng và còn nợ | Tự tính |
 
 Ngày hóa đơn được lấy theo ngày Việt Nam lúc mở biểu mẫu; giao diện chưa có ô chọn ngày bán. Khi mở, biểu mẫu reset, tạo requestId mới, để một dòng trống và khóa hai nút lưu cho tới khi tải được danh mục và mã dự kiến.
 
 Ô tên hàng dùng datalist. Nó nhận mã sản phẩm, tên chính xác hoặc dạng “SP000001 — Tên hàng”, không phân biệt hoa/thường ở bước tìm trong danh mục giao diện. Đây không phải tìm kiếm mờ.
 
-Chọn được sản phẩm mới sẽ tự điền giá. Nếu vẫn là cùng mã đã nhận diện thì giá người dùng sửa được giữ lại. Nếu xóa/đổi tên khiến mã nhận diện thay đổi, lần chọn tiếp theo có thể điền lại giá danh mục. Mặt hàng ngoài danh mục bị chặn khi lưu.
+Chọn sản phẩm đã hoàn thiện tự điền ĐVT đầu tiên và giá tương ứng. Đổi ĐVT lấy giá bán của ĐVT vừa chọn. Nếu vẫn cùng mã đã nhận diện thì sửa lại tên không tự ghi đè giá người dùng đã sửa. Hàng ngoài danh mục hoặc đang chờ hoàn thiện bị chặn cả trên giao diện và máy chủ, kể cả đã có lượng nhập.
+
+Mỗi thay đổi tên hàng, số lượng, ĐVT, giá hoặc xóa dòng đều làm trống Khách trả và tính lại công nợ. Sửa tên khách/địa chỉ/người giao không làm trống ô này. Có thể bấm Trả đủ lại sau khi đã chốt chi tiết.
 
 Khi lưu, website gửi tên chuẩn và productId cùng số lượng/đơn vị/giá. Máy chủ kiểm tra tồn hiện tại, tính lại tiền, cấp mã HD rồi lưu. Sau đó giao diện đóng biểu mẫu, hiện hóa đơn vừa lưu, làm mới lịch sử và kho, rồi in nếu đã chọn Lưu và in.
 
@@ -134,7 +142,7 @@ Khi lưu, website gửi tên chuẩn và productId cùng số lượng/đơn v�
 | Xóa dòng duy nhất | Tạo lại một dòng 1 trống |
 | Bấm Thêm mặt hàng | Đưa con trỏ tới dòng trống cuối, không thêm nhiều dòng rỗng |
 
-Với bán hàng, điều kiện mở dòng sau là tên không rỗng sau trim, kể cả tên chưa khớp danh mục; việc khớp được kiểm tra khi lưu. Với nhập kho, điều kiện là đã chọn sản phẩm.
+Với nhập và bán, điều kiện mở dòng sau là tên/mã không rỗng sau trim. Tên bán chưa khớp danh mục vẫn mở dòng sau, nhưng bị chặn khi lưu; tên nhập mới được phép tạo hàng chờ.
 
 Chỉ xóa số lượng/giá mà còn tên/sản phẩm sẽ không làm mất các dòng sau. Xóa nội dung tên/sản phẩm ở giữa xóa luôn dữ liệu phía sau; các dòng bị xóa không được khôi phục tự động. Tổng và công nợ được tính lại ngay, dòng trống không gửi lên máy chủ.
 
@@ -159,17 +167,18 @@ Tiền dùng kiểu Number của JavaScript; hiển thị theo vi-VN và thườ
 **13. Tính tồn kho.** Mã sản phẩm là khóa liên kết:
 
 ~~~text
-Tồn của SP = tổng số lượng nhập đã hoàn tất của SP
-            − tổng số lượng bán có productId của SP và có hóa đơn tổng tương ứng
+Lượng theo ĐVT gốc = số lượng dòng × factor của ĐVT dòng
+Tồn của SP = tổng lượng nhập đã hoàn tất theo ĐVT gốc
+            − tổng lượng bán có productId và hóa đơn tổng theo ĐVT gốc
 ~~~
 
 Máy chủ khởi tạo mỗi sản phẩm bằng 0, cộng các dòng phiếu nhập có phiếu tổng, rồi trừ các dòng bán có mã và hóa đơn tổng. Nó tính lại từ lịch sử khi đọc kho, kiểm tra bán hoặc xử lý nhập; không chỉ cập nhật một ô “tồn hiện tại”.
 
-Ví dụ nhập 100 bao, bán 20 bao, nhập thêm 50 bao thì còn 130 bao. Bộ lọc ngày trên trang bán không tác động phép tính này. Đây là tồn cộng dồn toàn bộ chứng từ, chưa có báo cáo “tồn tại một ngày” hoặc nhiều địa điểm kho.
+Ví dụ 1 bao = 50 kg: nhập 2 bao tạo tồn 100 kg; bán 2,3 kg còn 97,7 kg; bán thêm 1 bao còn 47,7 kg. Bộ lọc ngày trên trang bán không tác động tồn. Đây là tồn cộng dồn, chưa có báo cáo tại một ngày hoặc nhiều địa điểm kho.
 
-Nếu một hóa đơn bán có nhiều dòng cùng sản phẩm, máy chủ cộng nhu cầu các dòng trước khi kiểm tra tồn. Tồn 10, hai dòng bán 6 + 6 sẽ bị chặn. Kiểm tra theo từng dòng riêng lẻ không được dùng.
+Nếu một hóa đơn có nhiều dòng cùng sản phẩm, máy chủ quy đổi rồi cộng nhu cầu trước khi kiểm tra tồn. Tồn 100 kg, bán 1 bao (50 kg) và 60 kg bị chặn vì tổng 110 kg. Kiểm tra riêng từng dòng không được dùng.
 
-Hệ thống kiểm tra số lượng, không chuyển đổi đơn vị. Nếu cùng sản phẩm nhập “bao” rồi bán “kg”, mã vẫn cộng/trừ trực tiếp số lượng. Danh mục chưa có đơn vị chuẩn hay hệ số quy đổi.
+Hàng chờ chưa có quy đổi giữ lượng riêng theo ĐVT nhập và chưa được bán. Hoàn thiện phải bao gồm các ĐVT đã dùng, kể cả lượng còn bằng 0; máy chủ thử tính lại toàn bộ lịch sử trước khi ghi danh mục mới. Chứng từ giữ nguyên số lượng/ĐVT thực tế; quy đổi dùng khi tính tồn.
 
 **14. Độ chính xác số lượng.** Số lượng kho tối đa sáu chữ số thập phân có ý nghĩa, nhỏ nhất 0,000001; các số 0 thừa ở cuối không tạo thêm độ chính xác. Bên trong máy chủ:
 
@@ -179,11 +188,11 @@ Hệ thống kiểm tra số lượng, không chuyển đổi đơn vị. Nếu 
 0,1 + 0,1 + 0,1 = 300.000 vi đơn vị = 0,3
 ~~~
 
-Máy chủ phân tích phần nguyên, phần thập phân và số mũ, kiểm tra số dương/hữu hạn, chuyển thành số nguyên an toàn rồi cộng/trừ/so sánh. Số quá nhỏ, quá nhiều chữ số hữu ích hoặc vượt giới hạn an toàn bị từ chối. Nhiễu biểu diễn Number rất nhỏ có thể được chuẩn hóa; không cấp thêm một lượng tồn ảo cho kho 0.
+Máy chủ phân tích phần nguyên, phần thập phân và số mũ, kiểm tra số dương/hữu hạn, chuyển thành số nguyên an toàn rồi cộng/trừ/so sánh. Cả số lượng nhập vào và lượng theo ĐVT gốc sau quy đổi phải biểu diễn được với tối đa sáu chữ số thập phân. Số quá nhỏ, quá nhiều chữ số hữu ích hoặc vượt giới hạn an toàn bị từ chối thay vì làm tròn mất hàng. Nhiễu Number rất nhỏ có thể được chuẩn hóa; không cấp thêm tồn ảo cho kho 0.
 
 Number.MAX_SAFE_INTEGER là giới hạn số nguyên dùng để kiểm tra cả lượng từng dòng và lượng cộng dồn. Do thuật toán cộng tất cả nhập trước rồi trừ bán, giới hạn còn áp dụng vào tổng nhập lịch sử dù tồn ròng thấp. Phiếu nhập mới được tính thử bằng cùng thuật toán trước khi ghi.
 
-Giao diện hiển thị số lượng tối đa sáu chữ số thập phân, đặt min/step 0,000001. Form có novalidate nên các ràng buộc chính xác cuối cùng vẫn do máy chủ thực thi.
+Giao diện hiển thị tối đa sáu chữ số thập phân. Ô số lượng dùng min=0, step=1 và form novalidate để vẫn nhập được số thập phân, trong khi nút tăng/giảm và phím mũi tên chuyển đến số nguyên liền kề: 2,3 tăng thành 3, giảm thành 2; số nguyên tăng/giảm 1. Giảm có thể tới 0 nhưng lưu vẫn yêu cầu số lượng dương. Ràng buộc độ chính xác cuối cùng do máy chủ thực thi.
 
 **15. Mã tự động.** Có ba nhóm:
 
@@ -213,20 +222,20 @@ Ngày trong hai biểu mẫu web được giữ ổn định qua các lần bấ
 
 | Tab | Thứ tự cột |
 | --- | --- |
-| MATHANG | A productId; B name; C type; D price; E requestId; F requestHash |
+| MATHANG | A productId; B name; C type; D price; E requestId; F requestHash; G units; H status; I legacyUnit; J baseUnit |
 | NHAPKHO | A id; B date; C supplier; D address; E total; F paid; G debt; H requestId; I requestHash |
 | CT_NHAPKHO | A receiptId; B productId; C name; D qty; E unit; F price; G subtotal |
 | HOADON | A id; B date; C customer; D address; E total; F paid; G debt; H shipper; I requestId; J requestHash |
 | CHITIET_HD, dòng mới theo dõi kho | A id; B name; C qty; D unit; E price; F subtotal; G productId |
 | IN | Mẫu nhập/in trực tiếp trên Google Sheet |
 
-MATHANG lưu mã tại productId trong Sheet nhưng API trả sản phẩm với thuộc tính id. stock dùng productId. Các bảng không có khóa ngoại do một hệ quản trị SQL thực thi; kiểm tra liên kết nằm trong Apps Script.
+MATHANG lưu mã tại productId trong Sheet nhưng API trả thuộc tính id; stock dùng productId. G `units` là JSON các `{unit, price, factor}`. H là `pending` hoặc `active`; I `legacyUnit` ánh xạ đơn vị cho dòng cũ thiếu ĐVT; J `baseUnit` là ĐVT gốc. D `price` giữ giá tương thích, giá bán từng ĐVT nằm trong G. Các bảng không có khóa ngoại SQL; Apps Script kiểm tra liên kết.
 
 Tên, đơn giá, số lượng và thành tiền tại chi tiết là dữ liệu của chứng từ đã lập. Giá danh mục không tự thay lại giá chứng từ cũ; giá nhập không tự cập nhật giá bán danh mục. Tên tồn kho lấy tên hiện tại của danh mục; tên trong chứng từ có thể là tên đã lưu trước đó.
 
-Ba tab mới được tạo khi thao tác lưu đầu tiên cần đến: tạo sản phẩm tạo MATHANG; nhập đầu tiên tạo hai tab nhập. GET không tự tạo tab. Tab mới đã có dữ liệu mà các cột đầu không đúng tiêu đề sẽ báo lỗi, không tự sửa đè; cột dư phía sau được bỏ qua. HOADON/CHITIET_HD có thể không có dòng tiêu đề; chỉ dòng đầu được nhận dạng là tiêu đề mới bị bỏ, không tự bỏ các dòng tiêu đề lặp ở giữa bảng.
+Ba tab mới được tạo khi thao tác lưu đầu tiên cần đến. Nhập tên chưa có có thể tạo MATHANG cùng hai tab nhập. GET không tự tạo tab hoặc sửa cấu trúc. MATHANG sáu cột cũ vẫn đọc được; các nhãn G:J còn trống được bổ sung lúc lưu. Tiêu đề khác dự kiến báo lỗi; cột dư sau schema được bỏ qua. HOADON/CHITIET_HD có thể không có tiêu đề; chỉ dòng đầu được nhận dạng mới bị bỏ, không tự bỏ dòng tiêu đề lặp giữa bảng.
 
-Danh mục trùng mã, trùng tên, thiếu tên/loại hoặc giá không hợp lệ bị chặn. Phiếu nhập trùng/thiếu mã bị báo lỗi. Trình đọc hóa đơn bán cũ chưa có cơ chế phát hiện hết mã tổng bị trùng; dữ liệu sửa tay sai vẫn có thể ảnh hưởng kết quả.
+Danh mục trùng mã/tên hoặc cấu hình đơn vị không hợp lệ bị chặn. Hàng chờ được thiếu loại, giá bán và units; danh mục cũ thiếu units được đọc thành chờ hoàn thiện. Phiếu nhập trùng/thiếu mã báo lỗi. Trình đọc hóa đơn bán cũ chưa phát hiện hết mã tổng trùng; sửa tay sai có thể ảnh hưởng kết quả.
 
 **18. Các API hiện có.** Địa chỉ cơ sở nằm ở API_URL trong order-api.js; cùng một /exec xử lý tất cả.
 
@@ -234,15 +243,15 @@ Danh mục trùng mã, trùng tên, thiếu tên/loại hoặc giá không hợp
 | --- | --- | --- |
 | GET | Không có action | lastId của dòng hóa đơn tổng cuối, dùng hỗ trợ xem trước |
 | GET | action=list | orders: toàn bộ hóa đơn bán đã ghép chi tiết |
-| GET | action=inventory | products, receipts, stock, lastReceiptId |
-| POST | action=createProduct | status success và product |
-| POST | action=receiveStock | status success, receipt và stock hiện tại |
+| GET | action=inventory | schemaVersion: 2, products, receipts, stock, lastReceiptId |
+| POST | action=createProduct | status success và product; kèm productId để sửa/hoàn thiện |
+| POST | action=receiveStock | status success, receipt, stock và products hiện tại |
 | POST | Không có action hoặc action=saveOrder | status success, id và order khi theo dõi kho |
 
 Ví dụ tạo mặt hàng:
 
 ~~~json
-{"action":"createProduct","requestId":"yeu-cau-01","name":"Xi măng Hà Tiên","type":"Xi măng","price":100000}
+{"action":"createProduct","requestId":"yeu-cau-01","name":"Xi măng Hà Tiên","type":"Xi măng","baseUnit":"kg","units":[{"unit":"kg","price":2500,"factor":1},{"unit":"bao","price":100000,"factor":50}]}
 ~~~
 
 Ví dụ nhập:
@@ -284,7 +293,9 @@ Ví dụ lỗi:
 
 Các ví dụ là mô tả hợp đồng, không phải dữ liệu đã gửi lên Sheet. Action không hỗ trợ, thiếu payload hoặc JSON lỗi đều được trả lỗi. Ngày bỏ trống được mặc định theo ngày hiện tại khi máy chủ chuẩn hóa; tiền trả bỏ trống được đọc là 0. Không có tham số lọc ngày/phân trang được thực thi trên máy chủ; thứ tự API là thứ tự dòng Sheet. lastId/lastReceiptId lấy dòng tổng vật lý cuối chứ không bảo đảm là mã lớn nhất.
 
-**19. Chuỗi xử lý khi lưu bán.** Mô tả này áp dụng luồng theo dõi kho:
+`products` có `{id, name, type, price, units, status, legacyUnit, baseUnit, receivedUnits, requiresLegacyUnit}`. `stock` có `{productId, name, unit, qty}`; unit là ĐVT gốc cho hàng hoàn thiện hoặc ĐVT nhập cho hàng chờ. Nhập tên mới gửi `name`, để trống productId. Hoàn thiện gửi lại productId với cấu hình đầy đủ, thêm legacyUnit nếu lịch sử có dòng thiếu ĐVT.
+
+**19. Chuỗi xử lý khi lưu bán.** Mọi hóa đơn bán mới dùng danh mục và theo dõi kho:
 
 ~~~mermaid
 sequenceDiagram
@@ -322,7 +333,7 @@ Trên thực tế Apps Script tạo đối tượng phản hồi rồi nhả kh�
 - Lỗi máy chủ có message được đưa về biểu mẫu bằng textContent.
 - Phản hồi POST kiểu cũ “Success”, “OK”, “đã lưu” được nhận theo mẫu hẹp; phản hồi mơ hồ như đối tượng rỗng không được coi đã lưu.
 - GET trả “API OK” hoặc chỉ lastId không được giả thành lịch sử/kho rỗng.
-- Nếu API kho chưa có các mảng đúng cấu trúc, giao diện báo cần cập nhật deployment.
+- Nếu API kho chưa có schemaVersion từ 2 trở lên và các mảng đúng cấu trúc, giao diện báo cần cập nhật deployment.
 - Không có tự động gửi lại POST trong vòng lặp; người dùng chủ động thử lại trên biểu mẫu.
 
 Timeout của trình duyệt không bảo đảm Apps Script đã dừng. Máy chủ có thể đã ghi thành công khi trình duyệt không nhận được kết quả; đây là lý do cần requestId và thông báo chưa xác nhận kết quả lưu.
@@ -338,7 +349,9 @@ Trong cùng lần mở form, lỗi mạng và bấm lưu lại giữ nguyên mã
 | Cùng mã, dữ liệu khác sau khi đã lưu | Báo xung đột |
 | Không gửi requestId qua API | Cơ chế nhận diện gửi lại bị bỏ qua |
 
-requestHash ở đây là chuỗi JSON chuẩn hóa, không phải hash mật mã. Với nhập/bán, nó giữ ngày, đối tác, địa chỉ, số trả, các dòng productId/qty/unit/price và thông tin tương ứng. Tên hàng lấy từ danh mục và subtotal suy ra không dùng để gây xung đột khi tên danh mục thay đổi.
+requestHash là chuỗi JSON chuẩn hóa, không phải hash mật mã. Với nhập/bán, nó giữ ngày, đối tác, địa chỉ, số trả và các dòng productId/qty/unit/price. Dòng nhập không có productId giữ tên chuẩn hóa ban đầu để retry sau khi hàng được hoàn thiện/đổi tên vẫn nhận đúng phiếu. Tên do danh mục cung cấp và subtotal suy ra không gây xung đột. Máy chủ nhận cả dạng hash chứng từ của bản trước khi cập nhật khi có thể đối chiếu.
+
+MATHANG giữ requestId/hash của lần tạo/cập nhật gần nhất. Sau một lần sửa tiếp theo, thử lại yêu cầu tạo/cập nhật cũ hơn có thể nhận lỗi trùng/xung đột an toàn; chưa có sổ yêu cầu riêng lưu toàn bộ lịch sử chỉnh sửa sản phẩm.
 
 Thứ tự dòng vẫn là một phần nội dung so sánh. Nhập lại cả form mới hoặc tải lại trang tạo requestId mới; dữ liệu giống nhau ở form mới vẫn có thể thành chứng từ mới.
 
@@ -383,9 +396,9 @@ Mã đọc nhận dạng từng dòng. F có giá trị, kể cả 0, được �
 
 Trường hợp ĐVT là số mà F thiếu có thể mơ hồ. Không có việc tự di chuyển hoặc sửa lại các dòng lịch sử. Hóa đơn thiếu chi tiết vẫn có thể xuất hiện với danh sách mặt hàng rỗng. Dữ liệu items dạng JSON chuỗi cũ cũng được giao diện chuẩn hóa; chuỗi không đọc thành mảng được giữ để hiện nội dung.
 
-Hóa đơn cũ chưa có productId vẫn hiển thị nhưng không trừ vào tồn mới. Tồn đầu kỳ phải ghi bằng phiếu nhập. Backend chỉ giữ đường lưu cũ khi chưa từng dùng danh mục/kho và request không có mã sản phẩm; nếu danh mục trống nhưng còn chứng từ hoặc mã đã theo dõi kho thì chặn lưu để khôi phục danh mục.
+Hóa đơn cũ chưa có productId vẫn hiển thị nhưng không trừ vào tồn mới. Tồn đầu kỳ phải ghi bằng phiếu nhập. Mọi hóa đơn bán mới cần mặt hàng đã hoàn thiện; danh mục trống hoặc còn hàng chờ thì không được dùng đường lưu tự do để bỏ qua kiểm tra kho. Dữ liệu hóa đơn lịch sử được giữ nguyên.
 
-Đường lưu tương thích cũ không có đầy đủ requestId/ghi tổng cuối như đường theo dõi kho: web cũ ghi tổng trước rồi chi tiết; IN cũ cũng ghi tổng trước. Giao diện web hiện tại vẫn yêu cầu danh mục nên người dùng thông thường đi theo đường mới.
+Danh mục cũ sáu cột MATHANG được đưa vào chờ bổ sung ĐVT/giá/quy đổi, không mất mã hay chứng từ. Nếu tồn cũ không ghi đơn vị, người dùng chọn legacyUnit trước khi hoàn thiện; hệ thống dùng ánh xạ đó khi tính lại thay vì ghi sửa lịch sử.
 
 **26. Thao tác trực tiếp trên mẫu IN.** Các hàm giữ nguyên tên để nút trên Sheet tiếp tục gọi được.
 
@@ -406,7 +419,7 @@ Hóa đơn cũ chưa có productId vẫn hiển thị nhưng không trừ vào t
 
 taoSoHoaDonTuDong() lấy ngày L1, sinh mã xem trước và điền B5. luuHoaDon() đọc các ô, kiểm tra toàn bộ dòng có tên, lấy khóa, chặn mã đã có rồi lưu. Khác form web, IN bỏ qua dòng không có tên nhưng vẫn có thể đọc các dòng có tên phía sau một dòng trống.
 
-Khi danh mục đã có, IN tìm sản phẩm theo tên chuẩn hóa duy nhất, kiểm tra tồn và ghi productId. ĐVT để trống vì mã chưa xác định ô đơn vị trong mẫu IN. Khi mã B5 đã tồn tại hoặc đã có chi tiết dang dở, cần tạo mã mới. Mã tự sinh có dạng HD, nhưng nếu sửa B5 bằng tay thì hàm lưu hiện chỉ kiểm tra không trống/trùng, chưa kiểm tra đầy đủ mẫu ký tự HD. Cảnh báo UI chỉ mở sau khi nhả khóa.
+IN tìm mặt hàng đã hoàn thiện theo tên chuẩn hóa duy nhất, kiểm tra tồn và ghi productId. Mẫu chưa xác định ô ĐVT, nên mặt hàng chỉ có một ĐVT được dùng đơn vị duy nhất đó. Nếu có nhiều ĐVT, lưu bị chặn; dùng biểu mẫu web để chọn đúng đơn vị, không tự đoán từ giá. Khi mã B5 đã tồn tại hoặc có chi tiết dang dở, cần tạo mã mới. Mã tự sinh dạng HD nhưng B5 sửa tay hiện chỉ kiểm tra không trống/trùng, chưa kiểm tra đầy đủ mẫu ký tự. Cảnh báo UI mở sau khi nhả khóa.
 
 luuVaInHoaDon() chỉ chạy in khi luuHoaDon() trả true. Nó mở URL xuất PDF từ Sheet với vùng A1:G32, giấy A5 dọc, scale=2, lề 0,5, canh ngang giữa, không gridlines và đúng gid của tab IN. Nó không lưu PDF tự động vào Drive. L1 không trực tiếp nằm trong vùng xuất này.
 
@@ -433,7 +446,7 @@ Ctrl/Cmd+P trực tiếp dùng printArea đã được chuẩn bị lần cuối
 
 **28. Bố cục, khả năng sử dụng và trình duyệt.** Giao diện dùng màu xanh đậm/xanh dương, nền sáng, màu xanh lá cho thao tác lưu/in và màu đỏ cho lỗi/công nợ.
 
-Máy tính có bốn thẻ thống kê một hàng; Kho có lưới hóa đơn nhập lớn hơn bảng tồn. CSS có điểm chuyển ở 1050 px và 700 px. Dưới 700 px, điều hướng xuống hàng riêng, thẻ thống kê thành hai cột, hai khung kho xếp dọc và các nhóm form thành một cột.
+Máy tính có bốn thẻ thống kê một hàng; Kho có lưới hóa đơn nhập lớn và cột bên chứa hàng chờ/tồn kho. CSS có điểm chuyển ở 1050 px và 700 px. Dưới 700 px, điều hướng xuống hàng riêng, thẻ thống kê thành hai cột, các khung kho xếp dọc và nhóm form thành một cột.
 
 Bảng và dòng nhập có chiều rộng tối thiểu, cuộn ngang trên màn hình nhỏ thay vì giấu cột. Dialog cuộn trong giới hạn màn hình, thanh nút cuối bám đáy, nền sau được làm tối.
 
@@ -458,16 +471,19 @@ Quyền Google đã cấp cho clasp dùng để quản lý mã và triển khai,
 | Tình huống | Phản ứng |
 | --- | --- |
 | Chưa tải được danh mục | Khóa lưu form cần danh mục, báo lỗi |
-| Chưa có mặt hàng | Nhập/bán yêu cầu tạo danh mục trước |
+| Chưa có mặt hàng | Nhập tên mới được phép; bán yêu cầu có hàng hoàn thiện |
 | Trùng tên sản phẩm | Máy chủ từ chối tạo |
-| Hàng không có trong danh mục | Từ chối nhập/bán |
+| Nhập tên chưa có trong danh mục | Cấp mã SP chờ, ghi nhận kho và yêu cầu hoàn thiện trước khi bán |
+| Bán hàng chờ/ngoài danh mục hoặc thiếu ĐVT | Từ chối trước khi ghi hóa đơn |
+| ĐVT chưa khai báo hoặc quy đổi không biểu diễn chính xác | Yêu cầu hoàn thiện/sửa cấu hình hoặc số lượng |
+| Đổi ĐVT gốc/hệ số của hàng đã có lịch sử | Từ chối để giữ số lượng lịch sử nhất quán |
 | Số lượng/giá không hợp lệ | Báo lỗi, không ghi chứng từ mới |
 | Bán quá tồn hoặc tổng hai dòng quá tồn | Từ chối trước khi ghi chi tiết |
 | Tải lịch sử/kho thất bại sau khi đã tải được | Giữ dữ liệu cũ và nêu có thể chưa cập nhật |
 | Timeout lúc lưu | Giữ form, không khẳng định đã lưu; cùng requestId cho phép thử lại |
 | Phản hồi cũ đến muộn | Bỏ qua bằng số thứ tự yêu cầu |
 | Lưu thành công nhưng không mở được in | Báo đã lưu, lỗi chỉ ở bước in |
-| Danh mục bị xóa nhưng còn mã/chứng từ kho | Chặn đường lưu cũ, cần khôi phục danh mục |
+| Danh mục bị xóa nhưng còn mã/chứng từ kho | Chặn bán, cần khôi phục danh mục |
 | Tab mới sai cấu trúc hoặc liên kết sản phẩm mất | Báo lỗi thay vì tự đoán/sửa đè |
 
 Một số lỗi đọc chung có thể chặn cả lần tải, không chỉ bỏ qua dòng sai. Ví dụ CHITIET_HD thiếu mã, MATHANG trùng tên, phiếu nhập trùng mã hoặc tham chiếu mã sản phẩm không có.
@@ -476,10 +492,10 @@ Một số lỗi đọc chung có thể chặn cả lần tải, không chỉ b�
 
 | Phần | Cách có hiệu lực |
 | --- | --- |
-| HTML/CSS/JS | Live Server phục vụ tệp mới, trình duyệt cần tải lại |
+| HTML/CSS/JS | GitHub Pages/Netlify triển khai từ Git, hoặc Live Server phục vụ tệp cục bộ; trình duyệt cần tải lại |
 | Apps Script | Cập nhật nội dung dự án, tạo version và cập nhật deployment đang dùng |
 
-Lần triển khai vừa thực hiện đã tải mã cũ về sao lưu, giữ manifest/quyền truy cập hiện có, đưa bốn .gs lên cùng manifest, tạo phiên bản 11 và cập nhật deployment cũ để giữ URL. Phiên bản 10 còn để quay lại mã cũ nếu cần. Bản sao mã không phải bản sao dữ liệu Sheet.
+Đã triển khai Apps Script 12 ngày 04/11/2026: sao lưu mã phiên bản 11, giữ manifest/quyền hiện có và cập nhật deployment cũ để giữ URL. Đã xác nhận API kho trả schemaVersion 2 và API lịch sử hoạt động. Bản sao mã không phải bản sao dữ liệu Sheet; việc kiểm tra chỉ đọc dữ liệu thật, không lập chứng từ thử.
 
 Chỉ sửa file .gs trên máy không thay đổi Google; chỉ lưu mã trong trình chỉnh sửa Google chưa đổi version mà /exec đang trỏ tới. Các nút IN chạy mã đã lưu trong dự án, nên có thể dùng bản HEAD mới hơn bản web nếu chưa cập nhật deployment.
 
@@ -492,26 +508,26 @@ API_URL ở order-api.js, SPREADSHEET_ID và tên hai tab hóa đơn ở websang
 | Tệp | Phần được kiểm tra |
 | --- | --- |
 | tests/invoices.test.js | Ngày/tiền, API, lịch sử, bộ lọc, giữ dữ liệu, in, hợp đồng kho |
-| tests/order-rows.test.js | Dòng bán tự động, xóa dây chuyền, chọn danh mục, giá, lưu lại và lỗi tồn |
-| tests/inventory-ui.test.js | Điều hướng, tải kho, tạo hàng, dòng nhập, tính tiền, chống bấm trùng, in |
+| tests/order-rows.test.js | Dòng bán tự động, ĐVT bắt buộc, giá theo ĐVT, tăng/giảm số nguyên, xóa Khách trả, lưu và lỗi tồn |
+| tests/inventory-ui.test.js | Điều hướng, tải kho, tạo/cập nhật đơn vị, hàng chờ, nhập tên mới, tính tiền, chống bấm trùng, in |
 | tests/apps-script.test.js | Hóa đơn cũ/mới, số tự động, đọc chi tiết, thao tác IN, kiểm tra và khóa |
-| tests/inventory-backend.test.js | Danh mục, nhập/xuất, tồn, gửi lại, lỗi giữa chừng, độ chính xác và danh mục mất |
+| tests/inventory-backend.test.js | Danh mục nhiều ĐVT, quy đổi, hàng chờ/hoàn thiện, dữ liệu cũ, tồn, gửi lại, lỗi giữa chừng và độ chính xác |
 | tests/inventory-flow.test.js | API JavaScript thật gọi doGet/doPost thật qua Sheet giả lập |
 
-Các tệp apps-script-mocks.js và ui-dom-fixture.js cung cấp Sheet/DOM giả. Kiểm thử luồng đã kiểm tra nhập 2,5, bán 0,125, tồn 2,375 và gửi lại không trừ/cộng lần nữa. Sau triển khai đã đọc trực tiếp API lịch sử/kho để xác nhận cấu trúc hoạt động.
+Các tệp apps-script-mocks.js và ui-dom-fixture.js cung cấp Sheet/DOM giả. Kiểm thử bao gồm số thập phân và retry không cộng/trừ lần nữa, nhập 2 bao với factor 50 thành 100 kg, bán theo kg/bao, chặn hàng chờ, hoàn thiện giữ mã, ánh xạ ĐVT cũ và khóa hệ số sau phát sinh kho.
 
-Kiểm thử mô phỏng không đồng nghĩa đã kiểm chứng mọi trình duyệt, máy in hoặc tải nhiều người trên Google thật. Chưa có bộ tự động điều khiển trình duyệt thật, thử tải lớn hay giám sát vận hành liên tục.
+Đã kiểm tra luồng trên Edge bằng Playwright với frontend/API/Apps Script thật và Google Sheets giả: nhập tên mới → chờ → hoàn thiện quy đổi nhân/chia → bán thập phân, chọn giá ĐVT, xóa Khách trả và trừ đúng tồn. Kiểm tra này không ghi chứng từ thật. Chưa có bộ trình duyệt duy trì trong repository, thử tải lớn hoặc giám sát liên tục; kiểm thử mô phỏng cũng không xác nhận mọi máy in/trình duyệt hay tải nhiều người trên Google.
 
 **33. Những chức năng chưa có.** Các mục sau không được suy ra từ chữ “quản lý kho” hoặc “hóa đơn”:
 
 | Nhóm | Chưa được xây dựng |
 | --- | --- |
 | Người dùng | Đăng nhập, vai trò, phân quyền, nhật ký theo nhân viên |
-| Danh mục | Sửa/xóa hàng trên UI, danh mục loại và đơn vị chuẩn, barcode |
+| Danh mục | Xóa hàng trên UI, danh mục loại/đơn vị dùng chung, barcode, lịch sử mọi lần chỉnh sửa |
 | Đối tác | Hồ sơ khách/nhà cung cấp riêng, mã đối tác, lịch sử công nợ tổng theo đối tác |
 | Chứng từ | Sửa, xóa, hủy, trả hàng, hoàn tiền, điều chỉnh phiếu đã lưu |
 | Thanh toán | Nhiều lần thanh toán/thu nợ sau khi lập hóa đơn |
-| Kho | Nhiều kho, chuyển kho, kiểm kê, tồn theo ngày, quy đổi đơn vị, cảnh báo tồn thấp |
+| Kho | Nhiều kho, chuyển kho, kiểm kê, tồn theo ngày, cảnh báo tồn thấp |
 | Giá vốn | Bình quân/FIFO, giá trị tồn, lợi nhuận, tự cập nhật giá từ lần nhập |
 | Tìm kiếm/báo cáo | Tìm theo khách/sản phẩm, phân trang, lọc ngày phiếu nhập, xuất Excel/CSV |
 | Tự động hóa | Đồng bộ thời gian thực, lưu ngoại tuyến, tự dọn dòng lỗi, sao lưu Sheet định kỳ |
@@ -523,11 +539,11 @@ Sửa/xóa trực tiếp các dòng Sheet có thể làm số liệu thay đổi
 
 **34. Ví dụ nghiệp vụ hoàn chỉnh.** Giả sử danh mục mới chưa có tồn:
 
-1. Tạo “Xi măng Hà Tiên”, loại “Xi măng”, giá bán 100.000 → máy chủ cấp SP000001, tồn 0.
-2. Nhập 100 bao, giá nhập 90.000, trả nhà cung cấp 5.000.000 → phiếu NK tổng 9.000.000, nợ nhà cung cấp 4.000.000, tồn 100.
-3. Bán 20 bao, giá bán 100.000, khách trả 1.500.000 → hóa đơn HD tổng 2.000.000, khách còn nợ 500.000, tồn 80.
-4. Bấm gửi lại cùng requestId/nội dung của bước 3 → nhận lại chính hóa đơn đó, tồn vẫn 80.
-5. Lập hóa đơn mới bán 81 bao → máy chủ báo còn 80 và không ghi chứng từ mới.
-6. Lọc ngày ở màn hình Hóa đơn → chỉ bảng/thống kê bán đổi; tồn vẫn 80.
+1. Tạo “Xi măng Hà Tiên”, loại “Xi măng”, ĐVT gốc kg giá 2.500/hệ số 1 và bao giá 100.000/hệ số 50 → cấp SP000001, tồn 0 kg. Có thể nhập tên mới trước rồi hoàn thiện cùng cấu hình này trong Kho.
+2. Nhập 100 bao, giá nhập 90.000, trả nhà cung cấp 5.000.000 → NK tổng 9.000.000, nợ 4.000.000, tồn 5.000 kg.
+3. Bán 20 bao, giá 100.000, khách trả 1.500.000 → HD tổng 2.000.000, khách nợ 500.000, tồn 4.000 kg. Nhập Khách trả sau khi đã chốt chi tiết; sửa chi tiết sẽ làm trống khoản trả để kiểm tra lại.
+4. Gửi lại cùng requestId/nội dung bước 3 → nhận chính hóa đơn đó, tồn vẫn 4.000 kg.
+5. Lập hóa đơn mới bán 81 bao → nhu cầu 4.050 kg vượt tồn 4.000 kg, không ghi chứng từ mới.
+6. Lọc ngày màn hình Hóa đơn → chỉ bảng/thống kê bán đổi; tồn vẫn 4.000 kg.
 
 Khoản nợ nhà cung cấp và khoản khách còn nợ nằm trên hai nhóm chứng từ khác nhau; hệ thống không tự bù trừ hai khoản này hoặc tính chúng thành lợi nhuận.

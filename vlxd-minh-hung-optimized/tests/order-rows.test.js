@@ -74,6 +74,20 @@ async function three() { await fresh(); await name(0, 'Xi măng'); await name(1,
 async function run() {
     await emit(document, 'DOMContentLoaded'); await fresh();
     expectRows([''], 'Initial row 1 only');
+    equal(field(0, '.qty').getAttribute('step'), '1', 'Native quantity buttons use whole-number steps');
+    equal(field(0, '.qty').getAttribute('min'), '0', 'Native quantity steps align to integers');
+    equal(field(0, '.unit').tagName, 'SELECT', 'Sales units come from configured product units');
+    equal(field(0, '.unit').getAttribute('required'), '', 'Unit selector is required');
+    await input(0, '.qty', '2.3'); nodes.paid.value = '500';
+    await emit(nodes.items, 'keydown', {target:field(0, '.qty'),key:'ArrowUp'});
+    equal(field(0, '.qty').value, '3', 'Arrow up snaps decimal to next integer');
+    equal(nodes.paid.value, '', 'Arrow step clears customer payment');
+    await input(0, '.qty', '2.3');
+    await emit(nodes.items, 'keydown', {target:field(0, '.qty'),key:'ArrowDown'});
+    equal(field(0, '.qty').value, '2', 'Arrow down snaps decimal to prior integer');
+    await emit(nodes.items, 'keydown', {target:field(0, '.qty'),key:'ArrowDown'});
+    equal(field(0, '.qty').value, '1', 'Integer quantities decrease by one');
+    await input(0, '.qty', '0.125'); equal(field(0, '.qty').value, '0.125', 'Typing preserves fractional quantity');
     await emit(nodes.addItem, 'click'); expectRows([''], 'Manual add cannot bypass row 1');
     equal(document.activeElement, field(0, '.name'), 'Manual add focuses existing empty name');
     await name(0, '   '); expectRows([''], 'Whitespace does not create row 2');
@@ -100,7 +114,8 @@ async function run() {
     equal(app.Data.money(nodes.debt.textContent), 19500, 'Debt before clearing');
     await name(1, ''); expectRows(['Xi măng',''], 'Clear middle removes later data');
     equal(app.Data.money(nodes.total.textContent), 2000, 'Total excludes cleared and removed rows');
-    equal(app.Data.money(nodes.debt.textContent), 1500, 'Debt excludes removed rows immediately');
+    equal(nodes.paid.value, '', 'Clearing item name clears customer payment');
+    equal(app.Data.money(nodes.debt.textContent), 2000, 'Debt uses cleared payment immediately');
     await name(1, 'Sỏi'); expectRows(['Xi măng','Sỏi',''], 'Re-enter name creates fresh successor only');
     equal(field(2, '.qty').value, '1', 'Recreated row starts with quantity 1');
     equal(field(2, '.price').value, '', 'Removed row price never resurrects');
@@ -108,10 +123,17 @@ async function run() {
     await emit(form, 'submit', {submitter:nodes.saveOrder});
     equal(saved.length, 1, 'Save invoked once'); equal(saved[0].items.length, 1, 'Payload excludes every removed and empty row');
     equal(saved[0].items[0].name, 'Xi măng', 'Payload keeps surviving name'); equal(saved[0].items[0].unit, 'bao', 'Payload keeps unit');
-    equal(app.Data.money(saved[0].total), 2000, 'Saved total excludes removed data'); equal(app.Data.money(saved[0].debt), 1500, 'Saved debt excludes removed data');
+    equal(app.Data.money(saved[0].total), 2000, 'Saved total excludes removed data'); equal(app.Data.money(saved[0].debt), 2000, 'Saved debt uses cleared customer payment');
     equal(remembered.length, 1, 'Save updates list'); equal(refreshes, 1, 'Save refreshes history'); equal(dialog.open, false, 'Save closes form');
     await fresh(); expectRows([''], 'Reopening resets row data');
-    var catalog = [{id:'SP000001',name:'Xi măng',price:90000},{id:'SP000002',name:'Cát',price:150000}];
+    await name(0, 'Hàng thử'); await input(0, '.price', 1000); nodes.customer.value = 'Khách thử';
+    await emit(form, 'submit', {submitter:nodes.saveOrder});
+    equal(saved.length, 1, 'Missing unit blocks invoice save');
+    assert(nodes.orderFormError.textContent.includes('đơn vị tính'), 'Missing unit has useful validation');
+    equal(field(0, '.unit').getAttribute('aria-invalid'), 'true', 'Missing unit marked invalid');
+    var catalog = [{id:'SP000001',name:'Xi măng',price:90000,status:'active',baseUnit:'kg',units:[{unit:'bao',price:90000,factor:50},{unit:'kg',price:2000,factor:1}]},
+        {id:'SP000002',name:'Cát',price:150000,status:'active',baseUnit:'m³',units:[{unit:'m³',price:150000,factor:1}]},
+        {id:'SP000003',name:'Hàng chờ',price:1000,status:'pending',baseUnit:'cái',units:[{unit:'cái',price:1000,factor:1}]}];
     var stockRefreshes = 0;
     app.Inventory = {
         ensureLoaded:async function () {}, getProducts:function () { return catalog; },
@@ -121,6 +143,12 @@ async function run() {
     await fresh();
     await name(0, 'SP000001 — Xi măng');
     equal(app.Data.money(field(0, '.price').value), 90000, 'Selecting catalog product fills sale price');
+    equal(field(0, '.unit').value, 'bao', 'Product selects its first configured unit');
+    nodes.paid.value = '500'; field(0, '.unit').value = 'kg';
+    await emit(nodes.items, 'change', {target:field(0, '.unit')});
+    equal(app.Data.money(field(0, '.price').value), 2000, 'Changing unit loads its own selling price');
+    equal(nodes.paid.value, '', 'Changing unit clears customer payment');
+    field(0, '.unit').value = 'bao'; await emit(nodes.items, 'change', {target:field(0, '.unit')});
     await input(0, '.price', 95000); await name(0, 'SP000001 — Xi măng');
     equal(app.Data.money(field(0, '.price').value), 95000, 'Same product preserves edited sale price');
     await name(1, 'Cát'); equal(app.Data.money(field(1, '.price').value), 150000, 'Exact catalog name fills price');
@@ -130,7 +158,19 @@ async function run() {
     await emit(form, 'submit', {submitter:nodes.saveOrder});
     equal(saved.length, 1, 'Unknown product cannot be submitted');
     assert(nodes.orderFormError.textContent.includes('danh mục'), 'Unknown product has useful validation');
+    await name(0, 'Hàng chờ'); await emit(form, 'submit', {submitter:nodes.saveOrder});
+    equal(saved.length, 1, 'Pending product cannot be sold even when resolver exposes it');
+    assert(nodes.orderFormError.textContent.includes('hoàn thiện'), 'Pending product explains completion required');
     await name(0, 'SP000001'); await input(0, '.qty', 2);
+    nodes.paid.value = '100'; await input(0, '.qty', '2.3');
+    equal(nodes.paid.value, '', 'Changing decimal quantity clears customer payment');
+    nodes.paid.value = '100'; await input(0, '.price', 90000);
+    equal(nodes.paid.value, '', 'Changing sale price clears customer payment');
+    await input(0, '.unit', 'không có'); await emit(form, 'submit', {submitter:nodes.saveOrder});
+    equal(saved.length, 1, 'Unconfigured unit is rejected');
+    await input(0, '.unit', 'bao'); await input(0, '.qty', '2.3');
+    nodes.paid.value = '100'; await removeRow(1);
+    equal(nodes.paid.value, '', 'Deleting item row clears customer payment');
     var attempts = [], attemptsFail = true, prints = [];
     app.API.save = async function (order) {
         attempts.push(JSON.parse(JSON.stringify(order)));
@@ -141,7 +181,8 @@ async function run() {
     await emit(form, 'submit', {submitter:nodes.saveOrder});
     equal(dialog.open, true, 'Stock rejection keeps form and values');
     assert(nodes.orderFormError.textContent.includes('Còn 1'), 'Server stock error visible');
-    equal(field(0, '.qty').value, '2', 'Failed save keeps quantity');
+    equal(field(0, '.qty').value, '2.3', 'Failed save keeps decimal quantity');
+    equal(attempts[0].items[0].qty, '2.3', 'Typed fractional quantity is accepted in invoice payload');
     equal(attempts[0].items[0].productId, 'SP000001', 'Sale sends selected product ID');
     equal(attempts[0].items[0].name, 'Xi măng', 'Sale sends canonical name without UI code prefix');
     assert(attempts[0].requestId.length > 10, 'Sale sends retry request ID');

@@ -72,7 +72,7 @@
 
         <section id="productsView" data-page="products" aria-labelledby="productsTitle" hidden>
             <div class="page-heading">
-                <div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h1 id="productsTitle">Mặt hàng</h1><p class="muted">Quản lý tên hàng, loại hàng và giá bán để tạo hóa đơn nhanh hơn.</p></div>
+                <div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h1 id="productsTitle">Mặt hàng</h1><p class="muted">Quản lý tên hàng, loại hàng và giá bán theo từng đơn vị tính.</p></div>
                 <button type="button" class="primary" data-open-product><span aria-hidden="true">＋</span> Thêm mặt hàng</button>
             </div>
             <section class="invoice-section" aria-labelledby="catalogTitle">
@@ -81,8 +81,8 @@
                 <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Danh mục mặt hàng, có thể cuộn ngang">
                     <table class="order-table product-table">
                         <caption class="sr-only">Mã hàng, tên hàng, loại hàng và giá bán</caption>
-                        <thead><tr><th scope="col">Mã hàng</th><th scope="col">Tên hàng</th><th scope="col">Loại hàng</th><th scope="col" class="money">Giá bán</th></tr></thead>
-                        <tbody id="productList"><tr class="empty-row"><td colspan="4">Đang tải mặt hàng…</td></tr></tbody>
+                        <thead><tr><th scope="col">Mã hàng</th><th scope="col">Tên hàng</th><th scope="col">Loại hàng</th><th scope="col">ĐVT / Giá bán</th><th scope="col">Thao tác</th></tr></thead>
+                        <tbody id="productList"><tr class="empty-row"><td colspan="5">Đang tải mặt hàng…</td></tr></tbody>
                     </table>
                 </div>
             </section>
@@ -105,17 +105,24 @@
                         </table>
                     </div>
                 </section>
+                <div class="warehouse-sidebar">
+                <section class="invoice-section pending-section" aria-labelledby="pendingTitle">
+                    <div class="section-heading"><div><h2 id="pendingTitle">Chờ hoàn thiện mặt hàng</h2><p id="pendingCount" class="muted">Đang tải…</p></div></div>
+                    <p class="pending-note">Bổ sung loại hàng, đơn vị tính và giá bán để được tạo hóa đơn bán hàng.</p>
+                    <div id="pendingProducts" class="pending-products" role="list" aria-label="Mặt hàng cần bổ sung thông tin"></div>
+                </section>
                 <section class="invoice-section stock-section" aria-labelledby="stockTitle">
                     <div class="section-heading"><div><h2 id="stockTitle">Số lượng hàng trong kho</h2><p id="stockCount" class="muted">Đang tải tồn kho…</p></div></div>
                     <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Số lượng hàng trong kho, có thể cuộn ngang">
                         <table class="order-table stock-table">
                             <caption class="sr-only">Mã hàng, tên hàng và số lượng tồn kho</caption>
-                            <thead><tr><th scope="col">Mã hàng</th><th scope="col">Tên hàng</th><th scope="col" class="money">Số lượng</th></tr></thead>
-                            <tbody id="stockList"><tr class="empty-row"><td colspan="3">Đang tải tồn kho…</td></tr></tbody>
+                            <thead><tr><th scope="col">Mã hàng</th><th scope="col">Tên hàng</th><th scope="col">ĐVT</th><th scope="col" class="money">Số lượng</th></tr></thead>
+                            <tbody id="stockList"><tr class="empty-row"><td colspan="4">Đang tải tồn kho…</td></tr></tbody>
                         </table>
                     </div>
-                    <p class="stock-note">Tồn kho được tính từ hóa đơn nhập và hóa đơn bán có mã sản phẩm.</p>
+                    <p class="stock-note">Tồn kho được quy đổi về ĐVT gốc của mỗi mặt hàng. Hàng chờ hoàn thiện vẫn hiển thị theo ĐVT đã nhập và chưa được bán.</p>
                 </section>
+                </div>
             </div>
         </section>
         <footer class="page-footer">VLXD Minh Hùng <span aria-hidden="true">·</span> Quản lý bán hàng và kho</footer>
@@ -134,7 +141,7 @@
             <section aria-labelledby="itemsTitle">
                 <div class="items-heading"><h3 id="itemsTitle">Chi tiết hàng hóa</h3><button type="button" id="addItem" class="text-button">＋ Thêm mặt hàng</button></div>
                 <div class="items-scroll" tabindex="0" role="region" aria-label="Các mặt hàng trong hóa đơn, có thể cuộn ngang">
-                    <div class="item-header" aria-hidden="true"><div>#</div><div>Tên hàng</div><div>Số lượng</div><div>ĐVT</div><div>Đơn giá</div><div>Thành tiền</div><div></div></div>
+                    <div class="item-header" aria-hidden="true"><div>#</div><div>Tên hàng</div><div>Số lượng</div><div>ĐVT <span class="required">*</span></div><div>Đơn giá</div><div>Thành tiền</div><div></div></div>
                     <div id="items"></div>
                     <datalist id="productOptions"></datalist>
                 </div>
@@ -154,12 +161,18 @@
 
 <dialog id="productPanel" class="order-panel product-panel" aria-labelledby="productTitle">
     <form id="productForm" novalidate>
-        <div class="panel-heading"><div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h2 id="productTitle">Thêm mặt hàng</h2><p class="order-id">Mã hàng được cấp khi lưu.</p></div><button type="button" class="icon-button" data-close-product aria-label="Đóng thêm mặt hàng">×</button></div>
+        <div class="panel-heading"><div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h2 id="productTitle">Thêm mặt hàng</h2><p id="productCode" class="order-id">Mã hàng được cấp khi lưu.</p></div><button type="button" class="icon-button" data-close-product aria-label="Đóng mặt hàng">×</button></div>
         <div class="panel-content">
             <p id="productFormError" class="form-error" role="alert" hidden></p>
             <div class="form-group"><label for="productName">Tên hàng <span class="required" aria-hidden="true">*</span></label><input type="text" id="productName" name="productName" placeholder="Ví dụ: Xi măng Hà Tiên" required></div>
             <div class="form-group"><label for="productType">Loại hàng <span class="required" aria-hidden="true">*</span></label><input type="text" id="productType" name="productType" placeholder="Ví dụ: Xi măng, cát, gạch…" required></div>
-            <div class="form-group"><label for="productPrice">Giá bán <span class="required" aria-hidden="true">*</span></label><input type="text" id="productPrice" name="productPrice" inputmode="numeric" placeholder="Nhập giá bán lớn hơn 0" required></div>
+            <div class="form-group"><label for="productBaseUnit">Đơn vị tính gốc <span class="required" aria-hidden="true">*</span></label><input type="text" id="productBaseUnit" placeholder="Ví dụ: kg" required><p class="muted">Mọi lượng nhập và bán được quy đổi về đơn vị này để tính tồn kho.</p></div>
+            <section aria-labelledby="productUnitsTitle">
+                <div class="items-heading"><h3 id="productUnitsTitle">Đơn vị tính và giá bán <span class="required" aria-hidden="true">*</span></h3><button type="button" id="productAddUnit" class="text-button">＋ Thêm ĐVT</button></div>
+                <p class="muted">Khai báo giá bán cho ĐVT gốc và từng ĐVT bổ sung. Ví dụ: 1 bao = 50 × 1 kg; 1 g = 1 kg ÷ 1.000.</p>
+                <div id="productUnits" class="product-units"></div>
+            </section>
+            <div id="legacyUnitGroup" class="form-group legacy-unit-note" hidden><label for="productLegacyUnit">ĐVT cho tồn kho cũ chưa ghi đơn vị</label><p>Chọn đơn vị cho các dòng nhập/xuất cũ chưa có ĐVT. Dữ liệu chứng từ cũ vẫn được giữ nguyên.</p><select id="productLegacyUnit"><option value="">Chọn đơn vị…</option></select></div>
         </div>
         <div class="btn-group"><button type="button" class="secondary" data-close-product>Đóng</button><button type="submit" id="productSave" class="primary">Lưu mặt hàng</button></div>
     </form>
@@ -177,12 +190,13 @@
             <section aria-labelledby="receiptItemsTitle">
                 <div class="items-heading"><h3 id="receiptItemsTitle">Hàng hóa nhập kho</h3><button type="button" id="receiptAddItem" class="text-button">＋ Thêm mặt hàng</button></div>
                 <div class="items-scroll" tabindex="0" role="region" aria-label="Các mặt hàng nhập kho, có thể cuộn ngang">
-                    <div class="item-header receipt-item-header" aria-hidden="true"><div>#</div><div>Mặt hàng</div><div>Số lượng</div><div>ĐVT</div><div>Đơn giá</div><div>Thành tiền</div><div></div></div>
+                    <div class="item-header receipt-item-header" aria-hidden="true"><div>#</div><div>Mặt hàng</div><div>Số lượng</div><div>ĐVT <span class="required">*</span></div><div>Đơn giá</div><div>Thành tiền</div><div></div></div>
                     <div id="receiptItems"></div>
+                    <datalist id="receiptProductOptions"></datalist>
                 </div>
             </section>
             <div class="summary-grid receipt-summary-grid">
-                <p class="receipt-note">Chọn mặt hàng trong danh mục. Số lượng nhập sẽ được cộng vào kho sau khi lưu hóa đơn.</p>
+                <p class="receipt-note">Chọn hàng đã có hoặc nhập tên hàng mới. Hàng mới được ghi nhận vào kho, cần hoàn thiện thông tin và giá bán trước khi bán.</p>
                 <div class="summary">
                     <p>Tổng tiền <strong id="receiptTotal">0 đ</strong></p>
                     <div class="form-group"><label for="receiptPaid">Đã trả nhà cung cấp</label><div class="paid-input"><input type="text" id="receiptPaid" name="receiptPaid" inputmode="numeric" placeholder="0"><button type="button" id="receiptPayFull" class="secondary">Trả đủ</button></div></div>

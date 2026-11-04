@@ -57,7 +57,7 @@ function luuHoaDon() {
     }
     var tracked = typeof inventorySaveSale_ === "function" ? inventorySaveSale_({hd: hd, ct: ct, ss: ss}, {
       date: ngay, customer: khach, address: diachi, total: tong, paid: tra, debt: no, shipper: giao,
-      items: rows.map(function (row) { return {name: row[1], qty: row[2], unit: row[3], price: row[4], subtotal: row[5]}; })
+      items: rows.map(function (row) { return {name: row[1], qty: row[2], unit: row[3], price: row[4], subtotal: row[5], fromTemplate: true}; })
     }, soHD, "") : null;
     if (!tracked) {
       hd.appendRow([soHD, ngay, khach, diachi, tong, tra, no, giao]);

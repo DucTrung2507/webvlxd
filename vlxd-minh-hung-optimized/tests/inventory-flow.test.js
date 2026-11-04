@@ -25,7 +25,7 @@ async function run() {
     };
     var API = window.InvoiceApp.API;
     equal((await API.inventory()).products.length, 0, 'Client reads initially empty catalog');
-    var product = await API.createProduct({name:'Xi măng',type:'Vật liệu',price:100000,requestId:'flow-product'});
+    var product = await API.createProduct({name:'Xi măng',type:'Vật liệu',price:100000,baseUnit:'bao',units:[{unit:'bao',price:100000,factor:1}],requestId:'flow-product'});
     equal(product.id, 'SP000001', 'Client receives official product code');
     var receiptPayload = {requestId:'flow-receipt',date:'2026-11-03',supplier:'Nhà cung cấp',address:'Kho',paid:100000,
         items:[{productId:product.id,qty:2.5,unit:'bao',price:90000}]};

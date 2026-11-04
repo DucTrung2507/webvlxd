@@ -76,7 +76,8 @@
             if (/Yêu cầu không được hỗ trợ|Cần bổ sung file inventory\.gs/.test(error.message)) throw new Error(deploymentMessage);
             throw error;
         }
-        if (!data || !Array.isArray(data.products) || !Array.isArray(data.receipts) || !Array.isArray(data.stock)) {
+        if (!data || Number(data.schemaVersion) < 2 || !Number.isFinite(Number(data.schemaVersion)) ||
+            !Array.isArray(data.products) || !Array.isArray(data.receipts) || !Array.isArray(data.stock)) {
             throw new Error(deploymentMessage);
         }
         return data;
@@ -85,7 +86,9 @@
     async function createProduct(product) {
         const result = await request('', {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'},
             body: JSON.stringify({...product, action: 'createProduct'})});
-        if (!result.product || !result.product.id) throw new Error('Chưa nhận được xác nhận lưu mặt hàng. Hãy thử lại trong biểu mẫu này.');
+        if (!result.product || !result.product.id || !result.product.baseUnit || !Array.isArray(result.product.units) || !result.product.units.length) {
+            throw new Error('Chưa xác nhận được ĐVT và giá bán. Hãy cập nhật phiên bản Apps Script, sau đó làm mới và kiểm tra danh mục trước khi thử lại.');
+        }
         return result.product;
     }
 

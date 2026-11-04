@@ -1,6 +1,6 @@
 # Hóa đơn, danh mục mặt hàng và nhập kho
 
-Đã cập nhật dự án Google Apps Script và triển khai **phiên bản 11 ngày 03/11/2026** trên URL Web app đang dùng. Đã kiểm tra trực tiếp: lịch sử hóa đơn và API danh mục/nhập kho/tồn kho trả dữ liệu đúng cấu trúc. Kho mới chưa có mặt hàng hay phiếu nhập; tạo mặt hàng, nhập số lượng đầu kỳ rồi bắt đầu bán.
+Đã triển khai Apps Script **phiên bản 12 ngày 04/11/2026**: mặt hàng có nhiều đơn vị tính, giá bán và hệ số quy đổi; hàng nhập mới chờ hoàn thiện trước khi bán. Đã kiểm tra API kho trả `schemaVersion: 2` và API lịch sử hoạt động trên URL hiện có. Mặt hàng cũ chưa khai báo ĐVT cần được hoàn thiện tại Kho trước khi bán.
 
 Mô tả đầy đủ luồng sử dụng, dữ liệu, API, cơ chế tính tồn, xử lý lỗi và giới hạn hiện tại: [Luồng web và kỹ thuật](../docs/LUONG-WEB-VA-KY-THUAT.md).
 
@@ -21,11 +21,13 @@ Mã dùng bảng tính `1TfROVVl8D3d3UpbwvNADxg7elcCUmbgQZMfTQi8IyQw`. Danh mụ
 
 | Tab mới | Thứ tự cột từ A |
 | --- | --- |
-| `MATHANG` | `productId`, `name`, `type`, `price`, `requestId`, `requestHash` |
+| `MATHANG` | `productId`, `name`, `type`, `price`, `requestId`, `requestHash`, `units`, `status`, `legacyUnit`, `baseUnit` |
 | `NHAPKHO` | `id`, `date`, `supplier`, `address`, `total`, `paid`, `debt`, `requestId`, `requestHash` |
 | `CT_NHAPKHO` | `receiptId`, `productId`, `name`, `qty`, `unit`, `price`, `subtotal` |
 
 Đọc danh sách không tự tạo tab hay ghi dữ liệu. Các tab mới có dữ liệu nhưng tiêu đề không đúng sẽ báo lỗi để kiểm tra; mã không ghi đè dữ liệu đó. Các tab cũ `NHAPHANG`, `KHO`, `TKNHAPHANG` được giữ nguyên và không dùng làm nguồn tồn kho mới.
+
+`MATHANG` cũ với sáu cột A:F vẫn đọc được. Khi lưu mặt hàng, mã bổ sung nhãn G:J còn trống: G `units` lưu JSON các `{unit, price, factor}`; H `status` là `pending` hoặc `active`; I `legacyUnit` chỉ rõ ĐVT của chứng từ cũ chưa ghi đơn vị; J `baseUnit` là ĐVT gốc. `factor` là số ĐVT gốc tương ứng với một ĐVT dòng hàng, ví dụ 1 bao = 50 kg thì factor của bao là 50. ĐVT gốc phải có giá bán và factor bằng 1. Cột D `price` được giữ để tương thích; giá bán từng ĐVT nằm trong `units`.
 
 Các tab hóa đơn hiện có tiếp tục dùng thứ tự cột cũ:
 
@@ -40,35 +42,37 @@ Chi tiết lịch sử vẫn đọc được hai cấu trúc trong cùng tab `CH
 
 ## Quy tắc nghiệp vụ
 
-- Mặt hàng gồm tên, loại, giá; mã tự sinh `SP000001`, `SP000002`… Tên được so sánh không phân biệt hoa thường và khoảng trắng thừa, để tránh danh mục trùng và nhận đúng tên hàng nhập từ tab `IN`.
-- Phiếu nhập có mã `NKddMMyyyyNNNN`, ngày, nhà cung cấp, địa chỉ, danh sách hàng, tổng tiền, đã trả và công nợ. Số lượng/đơn giá phải dương và hữu hạn. Số lượng có tối đa 6 chữ số thập phân, nhỏ nhất `0,000001`; tổng lượng được tính bằng số nguyên vi đơn vị để không âm/dư tồn do số thực. Số lượng hoặc tổng tồn vượt giới hạn biểu diễn chính xác sẽ bị chặn trước khi ghi. Máy chủ tính thành tiền, tổng và công nợ từ các dòng hàng. Trả dư được giữ với công nợ âm, giống hóa đơn bán.
-- **Tồn kho = tổng số lượng nhập đã lưu hoàn tất − số lượng bán mới có mã mặt hàng.** Hóa đơn lịch sử chưa có `productId` vẫn hiển thị bình thường, không tự đoán tên để trừ vào kho mới. Tồn ban đầu của danh mục mới là 0; cần lập phiếu nhập cho lượng hàng bắt đầu theo dõi.
-- Khi đã có ít nhất một mặt hàng trong `MATHANG`, hóa đơn bán mới phải chọn đúng mã mặt hàng. Lưu từ `IN` được nối bằng tên duy nhất trong danh mục. Máy chủ cộng số lượng các dòng cùng mặt hàng rồi kiểm tra đủ tồn dưới khóa dùng chung, chặn bán vượt tồn từ cả hai nguồn.
-- Chỉ khi chưa có danh mục và chưa từng có chứng từ kho/mã mặt hàng, ba file hóa đơn mới giữ luồng lưu cũ để tương thích. Nếu danh mục bị xóa trong khi dữ liệu nhập/xuất vẫn tồn tại, thao tác bán bị chặn để khôi phục danh mục, không tự bỏ qua kiểm tra tồn. Đơn vị tính của tab `IN` để trống vì mẫu hiện tại chưa có ô ĐVT được xác định; không tự đoán vị trí ô.
+- Mặt hàng hoàn thiện gồm tên, loại, ĐVT gốc và ít nhất một `{unit, price, factor}`; mã tự sinh `SP000001`, `SP000002`… Mỗi ĐVT có giá bán riêng và hệ số quy đổi dương. Giao diện hỗ trợ nhập phép nhân hoặc phép chia với ĐVT gốc; máy chủ lưu hệ số nhân tương ứng. Tên và đơn vị được chuẩn hóa để tránh trùng do hoa thường, Unicode hoặc khoảng trắng.
+- Có thể cập nhật mặt hàng bằng `createProduct` kèm `productId`. Sau khi mặt hàng hoàn thiện đã có nhập/xuất, được sửa tên, loại, giá hoặc thêm ĐVT; không được đổi ĐVT gốc, ánh xạ ĐVT cũ, xóa ĐVT hoặc đổi hệ số làm sai lịch sử.
+- Nhập kho nhận mặt hàng có sẵn hoặc tên tự nhập. Tên mới được cấp mã SP, lưu trạng thái `pending` và hiện ở khung **Chờ hoàn thiện mặt hàng** trên trang Kho. Không dùng giá nhập làm giá bán. Phải bổ sung loại, ĐVT gốc, giá và quy đổi cho các ĐVT đã nhập/xuất trước khi hàng chuyển sang `active` và được bán.
+- Phiếu nhập có mã `NKddMMyyyyNNNN`, ngày, nhà cung cấp, địa chỉ, danh sách hàng, tổng tiền, đã trả và công nợ. ĐVT bắt buộc; số lượng/đơn giá phải dương và hữu hạn. Số lượng và lượng sau quy đổi có tối đa 6 chữ số thập phân, nhỏ nhất `0,000001`; máy chủ dùng số nguyên vi đơn vị, từ chối lượng không thể biểu diễn chính xác hoặc vượt giới hạn trước khi ghi. Máy chủ tính lại tiền và giữ công nợ âm khi trả dư.
+- **Tồn mặt hàng hoàn thiện theo ĐVT gốc = tổng (số lượng nhập × factor) − tổng (số lượng bán × factor).** Hàng chờ giữ lượng riêng theo từng ĐVT nhập tới khi hoàn thiện. Hóa đơn lịch sử chưa có `productId` vẫn hiển thị, không tự đoán tên để trừ kho. Danh mục cũ chưa khai báo ĐVT được đưa vào chờ hoàn thiện; nếu chứng từ cũ không có ĐVT, chọn `legacyUnit` rõ ràng trước khi quy đổi, không ghi đè chứng từ cũ.
+- Mọi hóa đơn bán mới phải dùng mặt hàng đã hoàn thiện và ĐVT đã cấu hình, kể cả khi danh mục đang trống. Máy chủ gộp nhu cầu cùng mặt hàng sau quy đổi rồi kiểm tra tồn dưới khóa. Mẫu `IN` nối theo tên duy nhất: mặt hàng chỉ có một ĐVT được dùng ĐVT đó; mặt hàng nhiều ĐVT bị chặn vì mẫu chưa xác định ô chọn ĐVT.
+- Trong biểu mẫu bán, chọn ĐVT tự điền giá bán tương ứng; vẫn được sửa giá trên dòng. Mọi thay đổi tên hàng, ĐVT, số lượng, giá hoặc xóa dòng làm trống **Khách trả**. Số lượng cho nhập thập phân; nút/phím tăng giảm tới số nguyên liền kề, ví dụ 2,3 tăng thành 3, giảm thành 2; số 0 vẫn bị chặn khi lưu.
 
 Các thao tác lưu dùng cùng `LockService.getScriptLock()`. Với phiếu nhập và đơn bán theo dõi tồn, chi tiết được ghi trước, dòng tổng được ghi cuối làm dấu hoàn tất. Chi tiết còn dang dở không cộng/trừ tồn; mã của chúng vẫn được bỏ qua khi cấp số tiếp theo để không ghép nhầm vào chứng từ khác. Những dòng này không bị tự xóa.
 
-Website gửi `requestId` ổn định cho mỗi lần tạo mặt hàng/phiếu nhập/hóa đơn. Thử lại cùng mã yêu cầu và cùng nội dung trả chứng từ đã lưu, không nhân đôi tồn kho; dùng lại mã với nội dung khác sẽ báo lỗi. Việc đổi tên hoặc giá danh mục sau khi lưu không khiến yêu cầu cũ bị trừ/cộng kho lại. `requestHash` lưu nội dung đã chuẩn hóa để kiểm tra xung đột, không phải mã mặt hàng hay số chứng từ.
+Website gửi `requestId` ổn định cho mỗi lần tạo/cập nhật mặt hàng, phiếu nhập và hóa đơn. Nhập/bán thử lại cùng mã và nội dung trả chứng từ đã lưu, không nhân đôi tồn; tên hàng tự nhập được giữ trong nội dung so sánh nên retry sau khi hoàn thiện/đổi tên vẫn nhận đúng phiếu. Cùng mã với nội dung khác báo lỗi. Mặt hàng giữ metadata của lần cập nhật gần nhất; retry yêu cầu tạo/cập nhật cũ hơn có thể báo lỗi an toàn sau một lần sửa tiếp theo. `requestHash` là nội dung JSON chuẩn hóa để kiểm tra xung đột.
 
 ## API
 
 | Yêu cầu | Dữ liệu trả về |
 | --- | --- |
 | `GET ?action=list` | `{orders: [...]}` toàn bộ hóa đơn và chi tiết |
-| `GET ?action=inventory` | `{products: [...], receipts: [...], stock: [...], lastReceiptId: "..."}` |
+| `GET ?action=inventory` | `{schemaVersion: 2, products: [...], receipts: [...], stock: [...], lastReceiptId: "..."}` |
 | `GET` không có action | `{lastId: "..."}` để xem trước mã hóa đơn |
-| `POST` với `action: "createProduct"` | `{status: "success", product: {...}}` |
-| `POST` với `action: "receiveStock"` | `{status: "success", receipt: {...}, stock: [...]}` |
-| `POST` hóa đơn hiện có | `{status: "success", id: "...", order: {...}}` khi theo dõi tồn; luồng cũ vẫn trả mã chính thức |
+| `POST` với `action: "createProduct"` | `{status: "success", product: {...}}`; gửi `productId` để sửa/hoàn thiện |
+| `POST` với `action: "receiveStock"` | `{status: "success", receipt: {...}, stock: [...], products: [...]}` |
+| `POST` hóa đơn hiện có | `{status: "success", id: "...", order: {...}}` |
 
-`stock` gồm `{productId, name, qty}`. Mặt hàng trên phiếu nhập gồm `{productId, name, qty, unit, price, subtotal}`. Ô ngày của Sheet được chuẩn hóa theo múi giờ Việt Nam; bộ lọc hóa đơn từ ngày/đến ngày chạy trên website và bao gồm cả hai mốc.
+`product` gồm `{id, name, type, price, units, status, legacyUnit, baseUnit}`. GET kho bổ sung `receivedUnits` và `requiresLegacyUnit` phục vụ hoàn thiện. `stock` gồm `{productId, name, unit, qty}`, dùng ĐVT gốc cho hàng hoàn thiện hoặc ĐVT nhập cho hàng chờ. Dòng nhập gồm `{productId, name, qty, unit, price, subtotal}`; khi nhập tên mới, gửi `name` và để trống `productId`. Ô ngày theo múi giờ Việt Nam; lọc hóa đơn từ ngày/đến ngày chạy trên website và bao gồm cả hai mốc.
 
 ## Cập nhật deployment
 
 1. Thay nội dung `websang.gs`, `luuin.gs`, `soHD.gs`, thêm `inventory.gs` rồi lưu trong cùng dự án Apps Script.
 2. Chọn **Deploy → Manage deployments**, mở Web app có URL `/exec` đang dùng trên website, bấm sửa, chọn **New version**, rồi **Deploy**. Giữ cấu hình người thực thi và quyền truy cập hiện tại. Cách này giữ nguyên URL; chỉ lưu file mà chưa cập nhật deployment thì website vẫn dùng mã cũ.
-3. Kiểm tra URL `/exec?action=list` trả `orders`, và `/exec?action=inventory` trả ba mảng `products`, `receipts`, `stock`. Kho mới chưa có dữ liệu thì các mảng rỗng; bước đọc không tạo tab.
-4. Trở lại website và bấm **Làm mới**. Tạo mặt hàng, lập phiếu nhập rồi mới lập đơn bán theo dõi tồn. Để trống ngày hoặc bấm **Xem tất cả** để xem toàn bộ lịch sử hóa đơn.
+3. Kiểm tra URL `/exec?action=list` trả `orders`, và `/exec?action=inventory` trả `schemaVersion: 2` cùng ba mảng `products`, `receipts`, `stock`. Bước đọc không tạo tab hoặc tự sửa dữ liệu cũ; giao diện chặn API kho phiên bản cũ.
+4. Trở lại website và bấm **Làm mới**. Hoàn thiện các mặt hàng cũ/chờ trong Kho, khai báo đầy đủ ĐVT/giá/quy đổi và ánh xạ ĐVT cũ nếu cần. Có thể tạo danh mục trước rồi nhập, hoặc nhập tên mới rồi hoàn thiện trước khi bán. Để trống ngày hoặc bấm **Xem tất cả** để xem toàn bộ lịch sử hóa đơn.
 
 Sau mỗi lần sửa mã cục bộ, cần cập nhật dự án và deployment để website sử dụng bản mới. Nếu phản hồi có `status: "error"`, xem `message` để kiểm tra đúng bảng tính, tên tab, tiêu đề hoặc dữ liệu nhập.
 
