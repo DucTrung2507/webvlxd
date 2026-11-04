@@ -49,15 +49,20 @@ function invoiceList_(sheets) {
     if (!details.has(id)) details.set(id, []);
     details.get(id).push(invoiceDetail_(row));
   });
-  return invoiceRows_(sheets.hd).map(function (row) {
+  let orders = invoiceRows_(sheets.hd).map(function (row) {
     const id = String(invoiceCell_(row[0])).trim();
     if (!id) throw new Error("HOADON có dòng dữ liệu thiếu mã hóa đơn.");
     return {
       id: id, date: invoiceDate_(row[1]), customer: invoiceCell_(row[2]), address: invoiceCell_(row[3]),
       total: invoiceCell_(row[4]), paid: invoiceCell_(row[5]), debt: invoiceCell_(row[6]),
-      shipper: invoiceCell_(row[7]), items: details.get(id) || []
+      shipper: invoiceCell_(row[7]), customerId: String(invoiceCell_(row[10])).trim(),
+      debtStatementId: String(invoiceCell_(row[11])).trim(), items: details.get(id) || []
     };
   });
+  const ss = sheets.ss || (typeof SpreadsheetApp !== "undefined" ? SpreadsheetApp.openById(SPREADSHEET_ID) : null);
+  if (typeof customersAttachOrders_ === "function") orders = customersAttachOrders_(ss, orders);
+  if (typeof debtApplyPayments_ === "function") orders = debtApplyPayments_(ss, orders);
+  return orders;
 }
 
 // Hai cách lưu cũ dùng chung CHITIET_HD: luuin.gs ghi 5 cột, websang.gs ghi 6 cột.
@@ -108,10 +113,14 @@ function doGet(e) {
   let lock;
   try {
     const action = e && e.parameter ? e.parameter.action || "" : "";
-    if (action && action !== "list" && action !== "inventory") throw new Error("Yêu cầu không được hỗ trợ.");
+    if (action && action !== "list" && action !== "inventory" && action !== "customers") throw new Error("Yêu cầu không được hỗ trợ.");
     // Đợi lần ghi đang chạy hoàn tất trước khi đọc cả hóa đơn và chi tiết.
     lock = LockService.getScriptLock();
     lock.waitLock(20000);
+    if (action === "customers") {
+      if (typeof customersGet_ !== "function") throw new Error("Cần bổ sung file customers.gs để sử dụng khách hàng.");
+      return invoiceJson_(customersGet_());
+    }
     if (action === "inventory") {
       if (typeof inventoryGet_ !== "function") throw new Error("Cần bổ sung file inventory.gs để sử dụng kho.");
       return invoiceJson_(inventoryGet_());
@@ -173,7 +182,8 @@ function invoiceValidate_(data) {
   if (total < 0 || paid < 0 || !Number.isFinite(total) || !Number.isFinite(debt)) throw new Error("Số tiền không hợp lệ.");
   return {
     date: String(data.date || Utilities.formatDate(new Date(), INVOICE_TIME_ZONE, "dd/MM/yyyy")),
-    customer: customer, address: String(data.address || "").trim(), shipper: String(data.shipper || "").trim(),
+    customer: customer, customerId: String(data.customerId || "").trim(), phone: String(data.phone || "").trim(),
+    address: String(data.address || "").trim(), shipper: String(data.shipper || "").trim(),
     total: total, paid: paid, debt: debt, items: items
   };
 }
@@ -184,6 +194,10 @@ function doPost(e) {
     if (!e || !e.postData || !e.postData.contents) throw new Error("Thiếu dữ liệu hóa đơn.");
     // Kiểm tra tất cả mặt hàng trước khi ghi dòng đầu tiên.
     const input = JSON.parse(e.postData.contents);
+    if (input && (input.action === "createDebtStatement" || input.action === "payDebtStatement")) {
+      if (typeof debtMutate_ !== "function") throw new Error("Cần bổ sung file customer-debt.gs để sử dụng công nợ khách hàng.");
+      return invoiceJson_(debtMutate_(input));
+    }
     if (input && (input.action === "createProduct" || input.action === "receiveStock")) {
       if (typeof inventoryMutate_ !== "function") throw new Error("Cần bổ sung file inventory.gs để sử dụng kho.");
       return invoiceJson_(inventoryMutate_(input));
@@ -197,7 +211,9 @@ function doPost(e) {
     if (tracked) return invoiceJson_({status: "success", id: tracked.id, order: tracked});
     if (data.items.some(function (item) { return !item.name; })) throw new Error("Vui lòng nhập tên mặt hàng.");
     const newId = generateId(sheets.hd, undefined, sheets.ct);
-    sheets.hd.appendRow([newId, data.date, data.customer, data.address, data.total, data.paid, data.debt, data.shipper]);
+    const customer = typeof customersResolve_ === "function" ? customersResolve_(sheets.ss, data, true) : null;
+    const statementId = customer && typeof debtStatementForSale_ === "function" ? debtStatementForSale_(sheets.ss, customer.id, data.debt) : "";
+    sheets.hd.appendRow([newId, data.date, data.customer, data.address, data.total, data.paid, data.debt, data.shipper, "", "", customer ? customer.id : "", statementId]);
     data.items.forEach(function (item) {
       sheets.ct.appendRow([newId, item.name, item.qty, item.unit, item.price, item.subtotal]);
     });

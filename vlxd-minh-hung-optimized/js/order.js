@@ -7,6 +7,8 @@
     let ready = false;
     let saveRequestId = '';
     let orderDate = '';
+    let selectedCustomer;
+    let customerDefaults;
     let returnFocus;
     let toastTimer;
 
@@ -20,6 +22,32 @@
     app.notify = notify;
 
     function rows() { return [...get('items').querySelectorAll('.item')]; }
+
+    const customerKey = value => String(value || '').trim().replace(/\s+/g, ' ').normalize('NFC').toLocaleLowerCase('vi');
+    function selectCustomer() {
+        if (!app.Customers) return;
+        if (get('customerIsNew').checked) {
+            selectedCustomer = null;
+            customerDefaults = null;
+            return;
+        }
+        const input = get('customer');
+        if (selectedCustomer && customerKey(input.value) === customerKey(selectedCustomer.name)) return;
+        const previous = selectedCustomer;
+        const customer = app.Customers.resolveCustomer(input.value);
+        selectedCustomer = customer;
+        if (customer) {
+            input.value = customer.name;
+            get('customerPhone').value = customer.phone || '';
+            get('address').value = customer.address || '';
+            customerDefaults = {phone: customer.phone || '', address: customer.address || ''};
+        } else if (previous && customerDefaults) {
+            // Khi đổi sang khách mới, bỏ thông tin cũ do lựa chọn trước tự điền.
+            if (get('customerPhone').value === customerDefaults.phone) get('customerPhone').value = '';
+            if (get('address').value === customerDefaults.address) get('address').value = '';
+            customerDefaults = null;
+        }
+    }
 
     function addItem() {
         const row = document.createElement('div');
@@ -125,7 +153,10 @@
         ready = false;
         saveRequestId = app.Data.requestId();
         orderDate = todayKey();
+        selectedCustomer = null;
+        customerDefaults = null;
         get('createForm').reset();
+        get('customerIsNew').checked = false;
         get('orderFormError').hidden = true;
         get('createForm').querySelectorAll('[aria-invalid]').forEach(input => input.removeAttribute('aria-invalid'));
         get('orderId').textContent = 'Đang tạo mã…';
@@ -140,8 +171,10 @@
                 await app.Inventory.ensureLoaded();
                 if (!app.Inventory.getProducts().length) throw new Error('Chưa có mặt hàng. Đóng biểu mẫu, vào Mặt hàng để tạo danh mục và vào Kho để nhập hàng trước khi bán.');
             }
+            if (app.Customers) await app.Customers.ensureLoaded();
             const id = await app.API.nextId(app.List.getOrders());
             if (request !== opening || !get('orderPanel').open) return;
+            selectCustomer();
             get('orderId').textContent = id;
             ready = true;
             setBusy(false);
@@ -170,7 +203,12 @@
             input.setAttribute('aria-invalid', 'true');
             if (!invalid) { invalid = input; message = text; }
         };
+        selectCustomer();
         if (!get('customer').value.trim()) fail(get('customer'), 'Vui lòng nhập tên khách hàng.');
+        if (app.Customers && !get('customerIsNew').checked && !selectedCustomer && app.Customers.getCustomers &&
+            app.Customers.getCustomers().filter(customer => customerKey(customer.name) === customerKey(get('customer').value)).length > 1) {
+            fail(get('customer'), 'Có nhiều khách trùng tên. Chọn đúng mã khách hàng trong danh sách gợi ý.');
+        }
         if (!filled.length) fail(rows()[0].querySelector('.name'), 'Vui lòng nhập ít nhất một mặt hàng.');
         filled.forEach(row => {
             const name = row.querySelector('.name');
@@ -191,7 +229,8 @@
         const total = totals();
         return {
             id: get('orderId').textContent, date: formatDate(orderDate), requestId: saveRequestId,
-            customer: get('customer').value.trim(), address: get('address').value.trim(),
+            customer: selectedCustomer ? selectedCustomer.name : get('customer').value.trim(),
+            customerId: selectedCustomer ? selectedCustomer.id : '', phone: get('customerPhone').value.trim(), address: get('address').value.trim(),
             shipper: get('shipper').value.trim(), total: formatMoney(total), paid: get('paid').value || '0',
             debt: formatMoney(total - money(get('paid').value)),
             items: filled.map(row => {
@@ -224,6 +263,7 @@
         app.List.remember(saved);
         app.List.load();
         if (app.Inventory) app.Inventory.load(true);
+        if (app.Customers) app.Customers.load(true);
         if (print) {
             try { app.Print.print(saved); } catch {
                 notify('Hóa đơn đã lưu, nhưng chưa mở được cửa sổ in. Kiểm tra trình duyệt trước khi in lại.', 'error');
@@ -269,7 +309,12 @@
         });
         get('paid').addEventListener('input', () => { formatInput(get('paid')); totals(); });
         get('payFull').addEventListener('click', () => { get('paid').value = totals().toLocaleString('vi-VN'); totals(); });
-        get('customer').addEventListener('input', () => get('customer').removeAttribute('aria-invalid'));
+        get('customer').addEventListener('input', () => {
+            get('customer').removeAttribute('aria-invalid');
+            if (!saving) selectCustomer();
+        });
+        get('customer').addEventListener('change', () => { if (!saving) selectCustomer(); });
+        get('customerIsNew').addEventListener('change', () => { if (!saving) selectCustomer(); });
         get('createForm').addEventListener('submit', submit);
         app.List.init();
     });

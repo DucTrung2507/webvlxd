@@ -114,7 +114,8 @@
             button.classList.toggle('active', active);
             if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
         });
-        if (view !== 'sales') load();
+        if (view === 'warehouse' || view === 'products') load();
+        if (view === 'customers' && app.Customers) app.Customers.load();
     }
 
     function formError(kind, message, input) {

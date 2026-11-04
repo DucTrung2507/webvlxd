@@ -292,10 +292,15 @@ function inventoryInputHash_(data, receiving) {
       name: item.productId ? "" : inventoryName_(item.name), qty: inventoryQuantity_(item.qty),
       unit: inventoryName_(item.unit), price: invoiceNumber_(item.price, "Đơn giá")};
   });
-  return JSON.stringify({date: inventoryDateKey_(data.date),
+  const value = {date: inventoryDateKey_(data.date),
     party: String(receiving ? data.supplier || "" : data.customer || "").trim(),
     address: String(data.address || "").trim(), shipper: receiving ? "" : String(data.shipper || "").trim(),
-    paid: invoiceNumber_(data.paid, "Số tiền đã trả"), items: items});
+    paid: invoiceNumber_(data.paid, "Số tiền đã trả"), items: items};
+  if (!receiving && (data.customerId || data.phone)) {
+    value.customerId = String(data.customerId || "").trim();
+    value.phone = typeof customersPhone_ === "function" ? customersPhone_(data.phone) : String(data.phone || "").trim();
+  }
+  return JSON.stringify(value);
 }
 
 function inventoryLegacyHash_(data, receiving, products) {
@@ -444,7 +449,7 @@ function inventorySaveSale_(sheets, data, fixedId, requestId) {
   const hash = inventoryInputHash_(data, false);
   requestId = inventoryRequest_(requestId);
   const invoiceRows = invoiceRows_(sheets.hd);
-  const replay = inventoryReplay_(invoiceRows, 8, requestId, hash, inventoryLegacyHash_(data, false, products));
+  const replay = inventoryReplay_(invoiceRows, 8, requestId, hash, data.customerId || data.phone ? "" : inventoryLegacyHash_(data, false, products));
   if (replay) return invoiceList_(sheets).find(function (order) { return order.id === String(replay[0]); });
   const items = inventoryPrepareItems_(data.items, products, true, false);
   const amounts = inventoryTotals_(items, data.paid);
@@ -469,12 +474,19 @@ function inventorySaveSale_(sheets, data, fixedId, requestId) {
   if (fixedId && invoiceRows.concat(detailRows).some(function (row) { return String(row[0] || "").trim() === id; })) {
     throw new Error("Số hóa đơn đã tồn tại hoặc có lần lưu chưa hoàn tất. Hãy tạo số hóa đơn mới.");
   }
+  if (typeof customersResolve_ === "function") customersResolve_(ss, data, false);
   inventorySaleColumns_(sheets);
+  if (typeof customersResolve_ === "function") {
+    const customer = customersResolve_(ss, data, true);
+    canonical.customerId = customer.id; canonical.phone = customer.phone;
+    canonical.debtStatementId = typeof debtStatementForSale_ === "function" ? debtStatementForSale_(ss, customer.id, amounts.debt) : "";
+  }
   items.forEach(function (item) {
     sheets.ct.appendRow([id, item.name, item.qty, item.unit, item.price, item.subtotal, item.productId]);
   });
   SpreadsheetApp.flush();
-  sheets.hd.appendRow([id, canonical.date, canonical.customer, canonical.address, amounts.total, amounts.paid, amounts.debt, canonical.shipper, requestId, hash]);
+  sheets.hd.appendRow([id, canonical.date, canonical.customer, canonical.address, amounts.total, amounts.paid, amounts.debt, canonical.shipper, requestId, hash,
+    canonical.customerId || "", canonical.debtStatementId || ""]);
   SpreadsheetApp.flush();
   return Object.assign({id: id, requestId: requestId}, canonical, amounts);
 }
@@ -482,7 +494,7 @@ function inventorySaveSale_(sheets, data, fixedId, requestId) {
 function inventorySaleColumns_(sheets) {
   // Chỉ thêm nhãn metadata khi dòng đầu là tiêu đề; không đè lên dữ liệu headerless.
   const updates = [];
-  [[sheets.hd, 9, ["requestId", "requestHash"]], [sheets.ct, 7, ["productId"]]].forEach(function (entry) {
+  [[sheets.hd, 9, typeof customersResolve_ === "function" ? ["requestId", "requestHash", "customerId", "debtStatementId"] : ["requestId", "requestHash"]], [sheets.ct, 7, ["productId"]]].forEach(function (entry) {
     const sheet = entry[0];
     if (!sheet.getLastRow()) return;
     const row = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), entry[1] + entry[2].length - 1)).getValues()[0];

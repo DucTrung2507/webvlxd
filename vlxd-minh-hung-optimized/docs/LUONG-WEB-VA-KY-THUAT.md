@@ -1,6 +1,6 @@
 **Luồng sử dụng và cách hoạt động kỹ thuật của website VLXD Minh Hùng**
 
-Tài liệu đối chiếu với mã nguồn và Apps Script phiên bản 13 đã triển khai ngày 04/11/2026: nhiều đơn vị tính, quy đổi tồn kho và mặt hàng chờ hoàn thiện. API kho đã xác nhận schemaVersion 2 và API lịch sử hoạt động. Các giới hạn và trường hợp lỗi được ghi cùng luồng sử dụng.
+Tài liệu theo mã nguồn và Apps Script phiên bản 14 đã triển khai ngày 04/11/2026, bổ sung khách hàng và công nợ tổng cộng dồn. Khách hàng có mã riêng, đơn mới nối vào phiếu công nợ đang mở; phiếu được đóng khi thu đủ. Các giới hạn và trường hợp lỗi được ghi cùng luồng sử dụng.
 
 **1. Kiến trúc tổng thể.** Hệ thống gồm giao diện HTML/CSS/JavaScript chạy trong trình duyệt, Google Apps Script xử lý nghiệp vụ và Google Sheets lưu dữ liệu. Live Server tại cổng 5500 chỉ phục vụ các tệp giao diện trên máy; việc lưu hóa đơn thực hiện trên Google.
 
@@ -21,32 +21,35 @@ Website chưa dùng React, Vue, hệ thống router, máy chủ Node.js riêng h
 
 | Tệp | Trách nhiệm |
 | --- | --- |
-| [index.html](../index.html) | Ba màn hình, ba biểu mẫu dạng dialog, mẫu in, các nhãn và ID giao diện |
-| [css/trangchu.css](../css/trangchu.css) | Màu sắc, bố cục, màn hình nhỏ, trạng thái nhập liệu và định dạng in A5 |
+| [index.html](../index.html) | Bốn màn hình, các biểu mẫu dạng dialog, mẫu in bán/nhập và công nợ, nhãn và ID giao diện |
+| [css/trangchu.css](../css/trangchu.css) | Màu sắc, bố cục, màn hình nhỏ, trạng thái nhập liệu; in A5 bán/nhập và A4 công nợ |
 | [js/order-data.js](../js/order-data.js) | Chuẩn hóa tiền, ngày, hóa đơn; lọc, sắp xếp, escape HTML và tạo requestId |
 | [js/order-api.js](../js/order-api.js) | URL API, fetch, timeout, kiểm tra phản hồi, các hàm đọc và lưu |
 | [js/order-list.js](../js/order-list.js) | Danh sách hóa đơn bán, bộ lọc, bốn thống kê và trạng thái tải |
 | [js/order.js](../js/order.js) | Biểu mẫu bán hàng, chọn sản phẩm, dòng tự động, tính tiền, lưu và gọi in |
 | [js/inventory.js](../js/inventory.js) | Chuyển màn hình, danh mục, nhập kho, lịch sử nhập và hiển thị tồn |
+| [js/customers.js](../js/customers.js) | Danh sách/tìm khách, đơn theo khách, phiếu tổng, các lần thu và tất toán |
 | [js/printorder.js](../js/printorder.js) | Đưa hóa đơn đã lưu vào mẫu in dùng chung và gọi window.print |
 | [apps-script/websang.gs](../apps-script/websang.gs) | Cấu hình bảng tính, API, lịch sử hóa đơn, kiểm tra dữ liệu và mã HD |
 | [apps-script/inventory.gs](../apps-script/inventory.gs) | Mặt hàng, phiếu nhập, tính tồn, chống vượt tồn, chống lưu trùng |
+| [apps-script/customers.gs](../apps-script/customers.gs) | Cấp KH, nhận diện khách, liên kết lịch sử và dữ liệu khách hàng |
+| [apps-script/customer-debt.gs](../apps-script/customer-debt.gs) | Phiếu công nợ cộng dồn, thu tiền, phân bổ, bản chốt tất toán và chống trùng |
 | [apps-script/luuin.gs](../apps-script/luuin.gs) | Các nút lưu, lưu và in, tạo hóa đơn mới trên mẫu IN |
 | [apps-script/soHD.gs](../apps-script/soHD.gs) | Tạo số dự kiến trong IN!B5 và kiểm tra ngày IN!L1 |
 | images/logo.png | Logo hiển thị trên thanh đầu trang |
 | tests/ | Kiểm thử bằng dữ liệu/Google Sheets/DOM giả lập |
 
-Các mô-đun JavaScript đặt chức năng trong window.InvoiceApp: Data, API, Inventory, List, Print và notify. Chúng dùng hàm bao để hạn chế biến toàn cục; giao tiếp qua đối tượng chung này.
+Các mô-đun JavaScript đặt chức năng trong window.InvoiceApp: Data, API, Inventory, Customers, List, Print và notify. Chúng dùng hàm bao để hạn chế biến toàn cục; giao tiếp qua đối tượng chung này.
 
-**3. Trình tự khi mở website.** Trình duyệt đọc index.html, CSS và logo. Sáu script có thuộc tính defer, chạy theo thứ tự: order-data → order-api → inventory → order-list → order → printorder. Việc đăng ký các sự kiện diễn ra khi DOMContentLoaded.
+**3. Trình tự khi mở website.** Trình duyệt đọc index.html, CSS và logo. Bảy script có thuộc tính defer, chạy theo thứ tự: order-data → order-api → inventory → customers → order-list → order → printorder. Việc đăng ký các sự kiện diễn ra khi DOMContentLoaded.
 
-Màn hình Hóa đơn được hiện sẵn; Kho và Mặt hàng có hidden. order.js gọi List.init(), từ đó gọi API lấy toàn bộ lịch sử hóa đơn. Danh mục và kho chưa được tải riêng ngay ở bước đầu; chúng được tải khi mở Kho/Mặt hàng, khi biểu mẫu cần danh mục hoặc khi làm mới sau một thao tác lưu.
+Màn hình Hóa đơn được hiện sẵn; Kho, Mặt hàng và Khách hàng có hidden. order.js gọi List.init(), từ đó gọi API lấy toàn bộ lịch sử hóa đơn. Danh mục và kho chưa được tải riêng ngay ở bước đầu; chúng được tải khi mở Kho/Mặt hàng, khi biểu mẫu cần danh mục hoặc khi làm mới sau một thao tác lưu.
 
 Không có localStorage, IndexedDB, service worker hoặc hàng đợi lưu ngoại tuyến. Dữ liệu giao diện và bản nháp nằm trong RAM của tab. Tải lại trang mất bản nháp chưa lưu; dữ liệu đã lưu trên Sheet sẽ được tải lại.
 
-**4. Điều hướng giữa ba màn hình.** Nút Hóa đơn, Kho, Mặt hàng có data-view. Hàm showView() so khớp với data-page của từng section, bật/tắt hidden, đổi lớp active và aria-current.
+**4. Điều hướng giữa bốn màn hình.** Nút Hóa đơn, Kho, Mặt hàng và Khách hàng có data-view. Hàm showView() so khớp với data-page của từng section, bật/tắt hidden, đổi lớp active và aria-current.
 
-Đây là ba giao diện trong cùng index.html, không phải ba URL độc lập. Đổi màn hình không tải lại toàn bộ trang và không thêm lịch sử router cho nút Back. Logo là liên kết index.html, có thể tải lại trang. Khi vào Kho/Mặt hàng, hệ thống gọi tải dữ liệu kho; khi quay về Hóa đơn, hệ thống không tự tải lại lịch sử bán chỉ vì đổi màn hình.
+Đây là bốn giao diện trong cùng index.html, không phải bốn URL độc lập. Đổi màn hình không tải lại toàn bộ trang và không thêm lịch sử router cho nút Back. Logo là liên kết index.html, có thể tải lại trang. Khi vào Kho/Mặt hàng, hệ thống gọi tải dữ liệu kho; khi vào Khách hàng gọi API khách hàng/công nợ. Khi quay về Hóa đơn, hệ thống không tự tải lại lịch sử bán chỉ vì đổi màn hình; thu công nợ thành công có gọi làm mới lịch sử để cập nhật số đã trả/còn nợ.
 
 **5. Màn hình Hóa đơn.** Phần này gồm:
 
@@ -112,7 +115,8 @@ Máy chủ kiểm tra danh mục, nhà cung cấp, ngày, số lượng, giá, s
 | Trường | Tính chất |
 | --- | --- |
 | Mã hóa đơn | Mã dự kiến, máy chủ quyết định mã chính thức |
-| Tên khách hàng | Bắt buộc |
+| Tên khách hàng | Bắt buộc; chọn mã KH/gợi ý hoặc nhập khách mới |
+| Điện thoại | Tùy chọn, dùng phân biệt/nhận diện khách |
 | Địa chỉ | Tùy chọn |
 | Các dòng hàng | Ít nhất một dòng hợp lệ |
 | Nhân viên giao hàng | Tùy chọn |
@@ -127,6 +131,8 @@ Ngày hóa đơn được lấy theo ngày Việt Nam lúc mở biểu mẫu; gi
 Chọn sản phẩm đã hoàn thiện tự điền ĐVT đầu tiên và giá tương ứng. Đổi ĐVT lấy giá bán của ĐVT vừa chọn. Nếu vẫn cùng mã đã nhận diện thì sửa lại tên không tự ghi đè giá người dùng đã sửa. Hàng ngoài danh mục hoặc đang chờ hoàn thiện bị chặn cả trên giao diện và máy chủ, kể cả đã có lượng nhập.
 
 Mỗi thay đổi tên hàng, số lượng, ĐVT, giá hoặc xóa dòng đều làm trống Khách trả và tính lại công nợ. Sửa tên khách/địa chỉ/người giao không làm trống ô này. Có thể bấm Trả đủ lại sau khi đã chốt chi tiết.
+
+Khách cũ được chọn bằng gợi ý có mã và thông tin liên hệ, tự điền điện thoại/địa chỉ. Tên trùng nhiều hồ sơ phải chọn đúng mã. Ô “Khách mới / khách trùng tên” bỏ việc tự chọn theo tên, cho nhập số điện thoại/địa chỉ phân biệt; máy chủ vẫn kiểm tra tránh gộp nhầm hoặc tạo trùng. Sau khi chọn mã, đổi địa chỉ giao không tạo khách mới.
 
 Khi lưu, website gửi tên chuẩn và productId cùng số lượng/đơn vị/giá. Máy chủ kiểm tra tồn hiện tại, tính lại tiền, cấp mã HD rồi lưu. Sau đó giao diện đóng biểu mẫu, hiện hóa đơn vừa lưu, làm mới lịch sử và kho, rồi in nếu đã chọn Lưu và in.
 
@@ -158,9 +164,9 @@ Làm tròn diễn ra trên từng dòng, không đợi cộng hết rồi mới 
 
 Tổng tính trên giao diện phục vụ xem trước. Máy chủ tính lại subtotal, total, debt từ số lượng/giá khi lưu theo dõi kho; không dùng tổng trình duyệt làm kết quả cuối. Bước kiểm tra đầu vào hóa đơn vẫn yêu cầu các trường tiền gửi lên có định dạng hợp lệ.
 
-Số tiền trả phải không âm. Trả dư được chấp nhận và công nợ âm phản ánh phần dư. Hệ thống chưa ghi thêm các lần thu/trả sau ngày lập chứng từ.
+Số tiền trả lúc lập đơn phải không âm. Trả dư được chấp nhận và công nợ âm phản ánh phần dư. Khách có thể trả tiếp qua phiếu công nợ tổng; lần thu phải dương, không vượt nợ còn lại và được ghi vào sổ THU_CONGNO. Công nợ nhà cung cấp chưa có sổ trả tiếp tương ứng.
 
-Tiền dùng kiểu Number của JavaScript; hiển thị theo vi-VN và thường làm tròn đến đồng. Giá và số trả ở API có thể mang phần thập phân; chưa có chính sách số nguyên an toàn riêng cho tiền rất lớn như đối với số lượng kho.
+Tiền dùng kiểu Number của JavaScript; hóa đơn bán/nhập hiển thị theo vi-VN và thường làm tròn đến đồng. Sổ công nợ tính bằng số nguyên phần trăm đồng, kiểm tra tối đa hai chữ số thập phân và giới hạn số nguyên an toàn trước phân bổ/thu tiền. Dữ liệu tiền không biểu diễn chính xác hoặc vượt giới hạn bị chặn; giao diện công nợ hiển thị tới hai chữ số thập phân.
 
 Ô nhập tiền khi gõ loại ký tự không phải chữ số rồi chèn dấu phân cách hàng nghìn; do đó không phải ô nhập giá âm hoặc tiền lẻ. Hàm đọc dữ liệu cũ hỗ trợ số, “1.200.000 đ”, “120.000”, các dấu tiền đ/₫/VND và phần thập phân một hoặc hai chữ số. Phần đuôi ba chữ số được hiểu theo cách phân cách hàng nghìn. Bộ đọc trình duyệt mềm hơn; bộ kiểm tra máy chủ chặn chuỗi tiền không đúng mẫu.
 
@@ -194,11 +200,14 @@ Number.MAX_SAFE_INTEGER là giới hạn số nguyên dùng để kiểm tra c�
 
 Giao diện hiển thị tối đa sáu chữ số thập phân. Ô số lượng dùng min=0, step=1 và form novalidate để vẫn nhập được số thập phân, trong khi nút tăng/giảm và phím mũi tên chuyển đến số nguyên liền kề: 2,3 tăng thành 3, giảm thành 2; số nguyên tăng/giảm 1. Giảm có thể tới 0 nhưng lưu vẫn yêu cầu số lượng dương. Ràng buộc độ chính xác cuối cùng do máy chủ thực thi.
 
-**15. Mã tự động.** Có ba nhóm:
+**15. Mã tự động.** Các nhóm chính:
 
 | Nhóm | Cấu trúc, ví dụ ngày 03/11/2026 |
 | --- | --- |
 | Mặt hàng | SP000001, tăng dần toàn danh mục |
+| Khách hàng | KH000001, tăng dần toàn danh mục |
+| Phiếu công nợ tổng | CNddMMyyyyNNNN |
+| Thu công nợ | TTddMMyyyyNNNN |
 | Hóa đơn bán | HD031120260001 |
 | Phiếu nhập | NK031120260001 |
 
@@ -225,7 +234,10 @@ Ngày trong hai biểu mẫu web được giữ ổn định qua các lần bấ
 | MATHANG | A productId; B name; C type; D price; E requestId; F requestHash; G units; H status; I legacyUnit; J baseUnit |
 | NHAPKHO | A id; B date; C supplier; D address; E total; F paid; G debt; H requestId; I requestHash |
 | CT_NHAPKHO | A receiptId; B productId; C name; D qty; E unit; F price; G subtotal |
-| HOADON | A id; B date; C customer; D address; E total; F paid; G debt; H shipper; I requestId; J requestHash |
+| HOADON | A id; B date; C customer; D address; E total; F paid; G debt; H shipper; I requestId; J requestHash; K customerId; L debtStatementId |
+| KHACHHANG | A customerId; B name; C phone; D address; E createdAt; F legacyKey |
+| CONGNO_TONG | A id; B customerId; C date; D throughDate; E customer; F items; G total; H requestId; I requestHash; J requestAliases |
+| THU_CONGNO | A id; B statementId; C customerId; D date; E amount; F note; G allocations; H requestId; I requestHash; J closingSnapshot |
 | CHITIET_HD, dòng mới theo dõi kho | A id; B name; C qty; D unit; E price; F subtotal; G productId |
 | IN | Mẫu nhập/in trực tiếp trên Google Sheet |
 
@@ -233,7 +245,9 @@ MATHANG lưu mã tại productId trong Sheet nhưng API trả thuộc tính id; 
 
 Tên, đơn giá, số lượng và thành tiền tại chi tiết là dữ liệu của chứng từ đã lập. Giá danh mục không tự thay lại giá chứng từ cũ; giá nhập không tự cập nhật giá bán danh mục. Tên tồn kho lấy tên hiện tại của danh mục; tên trong chứng từ có thể là tên đã lưu trước đó.
 
-Ba tab mới được tạo khi thao tác lưu đầu tiên cần đến. Nhập tên chưa có có thể tạo MATHANG cùng hai tab nhập. GET không tự tạo tab hoặc sửa cấu trúc. MATHANG sáu cột cũ vẫn đọc được; các nhãn G:J còn trống được bổ sung lúc lưu. Tiêu đề khác dự kiến báo lỗi; cột dư sau schema được bỏ qua. HOADON/CHITIET_HD có thể không có tiêu đề; chỉ dòng đầu được nhận dạng mới bị bỏ, không tự bỏ dòng tiêu đề lặp giữa bảng.
+Các tab mới được tạo khi thao tác lưu đầu tiên cần đến. Nhập tên chưa có có thể tạo MATHANG cùng hai tab nhập. GET không tự tạo tab hoặc sửa cấu trúc. MATHANG sáu cột cũ vẫn đọc được; các nhãn G:J còn trống được bổ sung lúc lưu. Tiêu đề khác dự kiến báo lỗi; cột dư sau schema được bỏ qua. HOADON/CHITIET_HD có thể không có tiêu đề; chỉ dòng đầu được nhận dạng mới bị bỏ, không tự bỏ dòng tiêu đề lặp giữa bảng.
+
+KHACHHANG dùng legacyKey để liên kết hóa đơn cũ không có K, không sửa lại các dòng cũ. CONGNO_TONG giữ ảnh chụp khách và các khoản nợ ban đầu dạng JSON; HOADON L nối các đơn nợ phát sinh vào phiếu đang mở. THU_CONGNO giữ allocations và closingSnapshot dạng JSON. F/G của HOADON luôn giữ số gốc lúc lập; API dẫn xuất paid/debt hiện tại bằng các lần thu đã phân bổ.
 
 Danh mục trùng mã/tên hoặc cấu hình đơn vị không hợp lệ bị chặn. Hàng chờ được thiếu loại, giá bán và units; danh mục cũ thiếu units được đọc thành chờ hoàn thiện. Phiếu nhập trùng/thiếu mã báo lỗi. Trình đọc hóa đơn bán cũ chưa phát hiện hết mã tổng trùng; sửa tay sai có thể ảnh hưởng kết quả.
 
@@ -244,9 +258,12 @@ Danh mục trùng mã/tên hoặc cấu hình đơn vị không hợp lệ bị 
 | GET | Không có action | lastId của dòng hóa đơn tổng cuối, dùng hỗ trợ xem trước |
 | GET | action=list | orders: toàn bộ hóa đơn bán đã ghép chi tiết |
 | GET | action=inventory | schemaVersion: 2, products, receipts, stock, lastReceiptId |
+| GET | action=customers | schemaVersion: 1, customers, orders, statements, payments |
 | POST | action=createProduct | status success và product; kèm productId để sửa/hoàn thiện |
 | POST | action=receiveStock | status success, receipt, stock và products hiện tại |
-| POST | Không có action hoặc action=saveOrder | status success, id và order khi theo dõi kho |
+| POST | Không có action hoặc action=saveOrder | status success, id và order với customerId/phone/debtStatementId |
+| POST | action=createDebtStatement, customerId, requestId | status success, statement và customerId thật; tạo mới hoặc trả phiếu đang mở |
+| POST | action=payDebtStatement, statementId, amount, date, note, requestId | status success, payment và statement mới nhất |
 
 Ví dụ tạo mặt hàng:
 
@@ -276,6 +293,8 @@ Ví dụ bán, tương tự dữ liệu biểu mẫu gửi:
   "id":"HD031120260001",
   "date":"03/11/2026",
   "customer":"Khách A",
+  "customerId":"KH000001",
+  "phone":"0901234567",
   "address":"Công trình A",
   "shipper":"Anh giao hàng",
   "total":"200.000 đ",
@@ -312,12 +331,13 @@ sequenceDiagram
         A-->>W: Trả hóa đơn đã lưu
     else Yêu cầu mới
         A->>A: Chuẩn hóa, tính tiền, gộp nhu cầu, kiểm tra tồn
+        A->>A: Nhận diện/cấp KH, tìm phiếu công nợ đang mở
         A->>S: Ghi chi tiết, flush
-        A->>S: Ghi dòng tổng, flush
+        A->>S: Ghi dòng tổng kèm customerId và debtStatementId, flush
         A-->>W: Mã và dữ liệu chính thức
     end
     A->>A: Nhả khóa trong finally
-    W->>W: Cập nhật bảng, làm mới lịch sử/kho
+    W->>W: Cập nhật bảng, làm mới lịch sử/kho/khách hàng
     opt Chọn Lưu và in
         W-->>N: Mở hộp thoại in
     end
@@ -340,7 +360,7 @@ Timeout của trình duyệt không bảo đảm Apps Script đã dừng. Máy c
 
 **21. Chống lưu trùng bằng requestId.** Mỗi lần mở biểu mẫu tạo một requestId. Ưu tiên crypto.randomUUID; nếu không có dùng thời gian và số ngẫu nhiên. Mã này không phải khóa đăng nhập hoặc chữ ký bảo mật.
 
-Trong cùng lần mở form, lỗi mạng và bấm lưu lại giữ nguyên mã. API nhận requestId là chuỗi không quá 160 ký tự trước khi trim, không bắt buộc đúng dạng UUID. Mã được đối chiếu trong từng bảng riêng; cùng chuỗi ở tạo mặt hàng và nhập kho không phải một yêu cầu duy nhất chung hai loại. Máy chủ lưu mã cùng requestHash:
+Trong cùng lần mở form, lỗi mạng và bấm lưu lại giữ nguyên mã. API nhận requestId là chuỗi không quá 160 ký tự trước khi trim, không bắt buộc đúng dạng UUID. Lập phiếu tổng và thu tiền bắt buộc mã không rỗng; bán/nhập vẫn tương thích trường hợp bỏ trống theo mô tả dưới. Mã được đối chiếu trong từng bảng riêng; cùng chuỗi ở tạo mặt hàng và nhập kho không phải một yêu cầu duy nhất chung hai loại. Máy chủ lưu mã cùng requestHash:
 
 | Trường hợp | Xử lý |
 | --- | --- |
@@ -349,7 +369,7 @@ Trong cùng lần mở form, lỗi mạng và bấm lưu lại giữ nguyên mã
 | Cùng mã, dữ liệu khác sau khi đã lưu | Báo xung đột |
 | Không gửi requestId qua API | Cơ chế nhận diện gửi lại bị bỏ qua |
 
-requestHash là chuỗi JSON chuẩn hóa, không phải hash mật mã. Với nhập/bán, nó giữ ngày, đối tác, địa chỉ, số trả và các dòng productId/qty/unit/price. Dòng nhập không có productId giữ tên chuẩn hóa ban đầu để retry sau khi hàng được hoàn thiện/đổi tên vẫn nhận đúng phiếu. Tên do danh mục cung cấp và subtotal suy ra không gây xung đột. Máy chủ nhận cả dạng hash chứng từ của bản trước khi cập nhật khi có thể đối chiếu.
+requestHash là chuỗi JSON chuẩn hóa, không phải hash mật mã. Bán hàng có thêm mã KH/điện thoại trong nội dung so sánh khi được gửi, nên không được thử lại cùng mã để đổi khách. Lập/xuất lại phiếu tổng giữ requestId và requestAliases để retry sau tất toán vẫn trả đúng đợt cũ, không mở nhầm phiếu mới. Thu tiền so sánh phiếu, số tiền, ngày, ghi chú; cùng mã không làm phát sinh lần thu thứ hai. Với nhập/bán, nó giữ ngày, đối tác, địa chỉ, số trả và các dòng productId/qty/unit/price. Dòng nhập không có productId giữ tên chuẩn hóa ban đầu để retry sau khi hàng được hoàn thiện/đổi tên vẫn nhận đúng phiếu. Tên do danh mục cung cấp và subtotal suy ra không gây xung đột. Máy chủ nhận cả dạng hash chứng từ của bản trước khi cập nhật khi có thể đối chiếu.
 
 MATHANG giữ requestId/hash của lần tạo/cập nhật gần nhất. Sau một lần sửa tiếp theo, thử lại yêu cầu tạo/cập nhật cũ hơn có thể nhận lỗi trùng/xung đột an toàn; chưa có sổ yêu cầu riêng lưu toàn bộ lịch sử chỉnh sửa sản phẩm.
 
@@ -380,6 +400,8 @@ Chi tiết không có dòng tổng tương ứng không được cộng/trừ v�
 Khi tải lại thành công, dữ liệu máy chủ thay thế bản tạm và bỏ trùng theo mã. Khi tải lỗi, dữ liệu đã có được giữ cùng thông báo có thể chưa cập nhật. Danh sách cũ phản hồi muộn không được ghi đè lần tải mới.
 
 Kho giữ products, receipts, stock và lastReceiptId. Hai màn hình dùng cùng bộ dữ liệu. pending ở mô-đun kho là Promise tải đang chạy; nhiều yêu cầu thông thường có thể dùng chung. load(true) tạo lần tải mới và bỏ qua phản hồi cũ theo loadVersion, không thật sự hủy các request cũ.
+
+Khách hàng giữ customers, orders, statements, payments và số thứ tự lần tải. Chọn khách hiện các đơn và phiếu tổng của mã đó; tìm kiếm theo mã/tên/điện thoại/địa chỉ. Khi lập phiếu hoặc thu tiền, khóa nút và giữ requestId qua lỗi mạng; sau thành công tải lại dữ liệu.
 
 ensureLoaded() dùng lại dữ liệu đã tải thành công nếu chưa có lỗi; không phải lần nào mở form cũng lấy danh mục mới. Tồn chính xác vẫn do máy chủ kiểm tra khi lưu. Không có WebSocket hoặc tự đồng bộ theo giây; dữ liệu được cập nhật khi vào màn hình, Làm mới hoặc lưu thành công.
 
@@ -438,7 +460,9 @@ Mã API mở bảng bằng SPREADSHEET_ID; các nút IN dùng bảng đang gắn
 | Dòng tiền đã trả | KHÁCH TRẢ | ĐÃ THANH TOÁN |
 | Phần ký/tên cuối | NGƯỜI GIAO HÀNG | NHÀ CUNG CẤP |
 
-Mẫu có tên cửa hàng và số điện thoại cố định trong HTML, số/ngày hóa đơn, địa chỉ, sáu cột STT/tên/ĐVT/số lượng/đơn giá/thành tiền và ba tổng tiền. CSS in ẩn giao diện quản lý/dialog/toast, hiện printArea dù vùng này hidden trên màn hình, dùng A5 dọc, lề 8 mm và Times New Roman.
+Phiếu công nợ có vùng in riêng và kiểu trang A4, giữ lịch sử các đơn/lần thu cùng trạng thái. Body chỉ bật printing-debt trong lúc gọi in; hóa đơn bán/nhập tiếp tục dùng vùng in A5, tránh in lẫn hai mẫu.
+
+Mẫu bán/nhập có tên cửa hàng và số điện thoại cố định trong HTML, số/ngày hóa đơn, địa chỉ, sáu cột STT/tên/ĐVT/số lượng/đơn giá/thành tiền và ba tổng tiền. CSS in ẩn giao diện quản lý/dialog/toast, hiện printArea dù vùng này hidden trên màn hình, dùng A5 dọc, lề 8 mm và Times New Roman.
 
 Lưu và in lưu trước; hủy hộp thoại in không hủy hóa đơn hoặc hoàn tồn. In không phải thao tác lưu lại. Phiếu nhập có thể in lại bằng mã NK; bảng bán hiện chưa có nút in lại. Không có xác nhận máy in đã in, xử lý afterprint hay tự xuất PDF trên website.
 
@@ -485,6 +509,10 @@ Quyền Google đã cấp cho clasp dùng để quản lý mã và triển khai,
 | Lưu thành công nhưng không mở được in | Báo đã lưu, lỗi chỉ ở bước in |
 | Danh mục bị xóa nhưng còn mã/chứng từ kho | Chặn bán, cần khôi phục danh mục |
 | Tab mới sai cấu trúc hoặc liên kết sản phẩm mất | Báo lỗi thay vì tự đoán/sửa đè |
+| Trùng tên khách không đủ thông tin phân biệt | Yêu cầu chọn mã hoặc nhập thông tin riêng |
+| Thu vượt nợ, số âm/0 hoặc phiếu đã tất toán | Từ chối trước khi ghi thu tiền |
+| Bấm lập tổng khi khách có phiếu đang mở | Trả lại phiếu mở, không tạo đợt chồng chéo |
+| Đơn nợ mới sau khi phiếu đã tất toán | Chờ lập phiếu đợt mới, phiếu cũ giữ nguyên |
 
 Một số lỗi đọc chung có thể chặn cả lần tải, không chỉ bỏ qua dòng sai. Ví dụ CHITIET_HD thiếu mã, MATHANG trùng tên, phiếu nhập trùng mã hoặc tham chiếu mã sản phẩm không có.
 
@@ -495,7 +523,7 @@ Một số lỗi đọc chung có thể chặn cả lần tải, không chỉ b�
 | HTML/CSS/JS | GitHub Pages/Netlify triển khai từ Git, hoặc Live Server phục vụ tệp cục bộ; trình duyệt cần tải lại |
 | Apps Script | Cập nhật nội dung dự án, tạo version và cập nhật deployment đang dùng |
 
-Đã triển khai Apps Script 13 ngày 04/11/2026: sao lưu mã phiên bản 11 và 12, giữ manifest/quyền hiện có và cập nhật deployment cũ để giữ URL. Đã xác nhận API kho trả schemaVersion 2 và API lịch sử hoạt động. Bản sao mã không phải bản sao dữ liệu Sheet; việc kiểm tra chỉ đọc dữ liệu thật, không lập chứng từ thử.
+Đã triển khai Apps Script 14 ngày 04/11/2026 sau khi sao lưu phiên bản 13: cập nhật cả sáu file .gs, tạo phiên bản mới và cập nhật deployment cũ để giữ URL. API kho giữ schemaVersion 2, API khách hàng dùng schemaVersion 1. Bản sao mã không phải bản sao dữ liệu Sheet; việc kiểm tra dữ liệu thật chỉ đọc, không lập chứng từ thử.
 
 Chỉ sửa file .gs trên máy không thay đổi Google; chỉ lưu mã trong trình chỉnh sửa Google chưa đổi version mà /exec đang trỏ tới. Các nút IN chạy mã đã lưu trong dự án, nên có thể dùng bản HEAD mới hơn bản web nếu chưa cập nhật deployment.
 
@@ -513,6 +541,8 @@ API_URL ở order-api.js, SPREADSHEET_ID và tên hai tab hóa đơn ở websang
 | tests/apps-script.test.js | Hóa đơn cũ/mới, số tự động, đọc chi tiết, thao tác IN, kiểm tra và khóa |
 | tests/inventory-backend.test.js | Danh mục nhiều ĐVT, quy đổi, hàng chờ/hoàn thiện, dữ liệu cũ, tồn, gửi lại, lỗi giữa chừng và độ chính xác |
 | tests/inventory-flow.test.js | API JavaScript thật gọi doGet/doPost thật qua Sheet giả lập |
+| tests/customers-backend.test.js | Cấp KH, nhận diện/mã/điện thoại, khách trùng tên, legacy, retry và liên kết đơn |
+| tests/customer-debt.test.js | Công nợ cộng dồn, phân bổ FIFO, thu từng phần/đủ, tất toán, nhiều đợt, retry, legacy và lỗi ghi |
 
 Các tệp apps-script-mocks.js và ui-dom-fixture.js cung cấp Sheet/DOM giả. Kiểm thử bao gồm số thập phân và retry không cộng/trừ lần nữa, nhập 2 bao với factor 50 thành 100 kg, bán theo kg/bao, chặn hàng chờ, hoàn thiện giữ mã, ánh xạ ĐVT cũ và khóa hệ số sau phát sinh kho.
 
@@ -524,12 +554,12 @@ Các tệp apps-script-mocks.js và ui-dom-fixture.js cung cấp Sheet/DOM giả
 | --- | --- |
 | Người dùng | Đăng nhập, vai trò, phân quyền, nhật ký theo nhân viên |
 | Danh mục | Xóa hàng trên UI, danh mục loại/đơn vị dùng chung, barcode, lịch sử mọi lần chỉnh sửa |
-| Đối tác | Hồ sơ khách/nhà cung cấp riêng, mã đối tác, lịch sử công nợ tổng theo đối tác |
+| Đối tác | Hồ sơ/mã nhà cung cấp riêng, sổ công nợ tổng nhà cung cấp, gộp/sửa/xóa hồ sơ KH trên UI |
 | Chứng từ | Sửa, xóa, hủy, trả hàng, hoàn tiền, điều chỉnh phiếu đã lưu |
-| Thanh toán | Nhiều lần thanh toán/thu nợ sau khi lập hóa đơn |
+| Thanh toán | Sổ trả nợ nhà cung cấp, hoàn tác/sửa lần thu đã lưu, tự bù khoản khách trả dư |
 | Kho | Nhiều kho, chuyển kho, kiểm kê, tồn theo ngày, cảnh báo tồn thấp |
 | Giá vốn | Bình quân/FIFO, giá trị tồn, lợi nhuận, tự cập nhật giá từ lần nhập |
-| Tìm kiếm/báo cáo | Tìm theo khách/sản phẩm, phân trang, lọc ngày phiếu nhập, xuất Excel/CSV |
+| Tìm kiếm/báo cáo | Tìm sản phẩm hoặc tìm trực tiếp mọi đơn, phân trang, lọc ngày phiếu nhập, xuất Excel/CSV |
 | Tự động hóa | Đồng bộ thời gian thực, lưu ngoại tuyến, tự dọn dòng lỗi, sao lưu Sheet định kỳ |
 | Hóa đơn | Kết nối nhà cung cấp hóa đơn điện tử, thuế/VAT/chiết khấu/phí vận chuyển riêng |
 

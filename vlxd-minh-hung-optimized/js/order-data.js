@@ -85,7 +85,7 @@ window.InvoiceApp = window.InvoiceApp || {};
         const paid = money(raw.paid);
         return {
             id: String(raw.id ?? '').trim(), date: parseDate(raw.date, raw.id),
-            customer: String(raw.customer ?? ''), address: String(raw.address ?? ''),
+            customer: String(raw.customer ?? ''), customerId: String(raw.customerId ?? ''), phone: String(raw.phone ?? ''), address: String(raw.address ?? ''),
             shipper: String(raw.shipper ?? ''), items, itemText, total, paid,
             debt: raw.debt == null || raw.debt === '' ? total - paid : money(raw.debt)
         };

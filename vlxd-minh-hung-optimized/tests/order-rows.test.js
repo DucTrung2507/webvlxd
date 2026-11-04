@@ -46,7 +46,8 @@ function add(id, tag, parent, attrs) { var el = new Element(tag, attrs); nodes[i
 var openButton = add('openButton', 'button', body, {'data-open-order':''});
 var dialog = add('orderPanel', 'dialog'), form = add('createForm', 'form', dialog);
 add('closeButton', 'button', form, {'data-close-order':''});
-['customer','address','shipper','paid'].forEach(function (id) { add(id, 'input', form); });
+['customer','customerPhone','address','shipper','paid'].forEach(function (id) { add(id, 'input', form); });
+add('customerIsNew','input',form,{type:'checkbox'});
 ['items','orderId','orderFormError','total','debt'].forEach(function (id) { add(id, 'div', form); });
 ['addItem','payFull','saveOrder','saveAndPrint'].forEach(function (id) { add(id, 'button', form); });
 nodes.saveOrder.value = 'save'; nodes.saveAndPrint.value = 'print'; add('toast', 'div');
@@ -192,6 +193,74 @@ async function run() {
     equal(prints[0].id, 'HD031120260099', 'Print uses committed server invoice ID');
     equal(stockRefreshes, 1, 'Saved sale refreshes inventory');
     equal(dialog.open, false, 'Committed catalog sale closes');
+    var customerCatalog = [
+        {id:'KH000001',name:'Khách đã có',phone:'0900000001',address:'Địa chỉ cũ'},
+        {id:'KH000002',name:'Trùng tên',phone:'0900000002',address:'Địa chỉ A'},
+        {id:'KH000003',name:'Trùng tên',phone:'0900000003',address:'Địa chỉ B'}
+    ];
+    var customerLoads = 0, customerRefreshes = 0, customerSales = [], customerLoadFailure = false;
+    app.Customers = {
+        ensureLoaded:async function () { customerLoads++; if (customerLoadFailure) throw new Error('Chưa tải được khách hàng.'); },
+        getCustomers:function () { return customerCatalog.slice(); },
+        resolveCustomer:function (value) {
+            var text=String(value).trim().toLocaleLowerCase('vi');
+            var exact=customerCatalog.find(function (customer) { return [customer.id,customer.id+' — '+customer.name].some(function(label){return label.toLocaleLowerCase('vi')===text;}); });
+            var byName=customerCatalog.filter(function(customer){return customer.name.toLocaleLowerCase('vi')===text;});
+            return exact || (byName.length===1 ? byName[0] : undefined);
+        },
+        load:function () { customerRefreshes++; }
+    };
+    app.API.save = async function (order) { customerSales.push(JSON.parse(JSON.stringify(order))); return Object.assign({},order,{id:'HD041120260001'}); };
+    await fresh(); equal(customerLoads,1,'Opening invoice loads customer database');
+    nodes.customer.value='KH000001 — Khách đã có'; nodes.paid.value='200'; await emit(nodes.customer,'input');
+    equal(nodes.customer.value,'Khách đã có','Customer selection replaces code label with canonical name');
+    equal(nodes.customerPhone.value,'0900000001','Customer selection prefills phone');
+    equal(nodes.address.value,'Địa chỉ cũ','Customer selection prefills address');
+    equal(nodes.paid.value,'200','Changing customer metadata does not clear customer payment');
+    nodes.customerPhone.value='0900000099'; nodes.address.value='Địa chỉ giao khác';
+    await emit(nodes.customer,'change');
+    equal(nodes.address.value,'Địa chỉ giao khác','Repeated customer event preserves edited delivery address');
+    await name(0,'SP000001'); await emit(form,'submit',{submitter:nodes.saveOrder});
+    equal(customerSales[0].customerId,'KH000001','Existing customer links invoice by stable code');
+    equal(customerSales[0].customer,'Khách đã có','Selected customer sends canonical name');
+    equal(customerSales[0].phone,'0900000099','Edited phone is included in invoice data');
+    equal(customerSales[0].address,'Địa chỉ giao khác','Invoice keeps delivery address for selected customer');
+    equal(customerRefreshes,1,'Successful invoice refreshes customer database');
+    await fresh(); nodes.customer.value='KH000001'; await emit(nodes.customer,'input');
+    nodes.customer.value='Khách mới'; await emit(nodes.customer,'input');
+    equal(nodes.customerPhone.value,'','Changing to new customer removes inherited phone');
+    equal(nodes.address.value,'','Changing to new customer removes inherited address');
+    nodes.customerPhone.value='0912345678'; nodes.address.value='Địa chỉ mới';
+    await name(0,'SP000001'); await emit(form,'submit',{submitter:nodes.saveOrder});
+    equal(customerSales[1].customerId,'','New customer leaves code creation to server');
+    equal(customerSales[1].customer,'Khách mới','New customer name preserved');
+    equal(customerSales[1].phone,'0912345678','New customer phone sent');
+    await fresh(); nodes.customer.value='Trùng tên'; await emit(nodes.customer,'input'); await name(0,'SP000001');
+    await emit(form,'submit',{submitter:nodes.saveOrder});
+    equal(customerSales.length,2,'Ambiguous customer name cannot silently create or pick account');
+    assert(nodes.orderFormError.textContent.includes('trùng tên'),'Ambiguous customer validation asks for exact customer code');
+    nodes.customer.value='KH000003 — Trùng tên'; await emit(nodes.customer,'input');
+    await emit(form,'submit',{submitter:nodes.saveOrder});
+    equal(customerSales[2].customerId,'KH000003','Selecting precise duplicate-name customer uses correct account');
+    equal(customerSales[2].phone,'0900000003','Duplicate-name customer phone not borrowed from another account');
+    await fresh(); nodes.customer.value='KH000001'; await emit(nodes.customer,'input');
+    nodes.customerPhone.value='0987654321'; nodes.address.value='Nhà khách mới trùng tên'; nodes.paid.value='123';
+    nodes.customerIsNew.checked=true; await emit(nodes.customerIsNew,'change');
+    equal(nodes.customerPhone.value,'0987654321','New-customer toggle preserves manually entered phone');
+    equal(nodes.address.value,'Nhà khách mới trùng tên','New-customer toggle preserves manually entered address');
+    equal(nodes.paid.value,'123','New-customer toggle does not change payment');
+    nodes.customer.value='Trùng tên'; await emit(nodes.customer,'input');
+    equal(nodes.customerPhone.value,'0987654321','New-customer mode does not auto-fill another person by name');
+    await name(0,'SP000001'); await emit(form,'submit',{submitter:nodes.saveOrder});
+    equal(customerSales[3].customerId,'','Explicit same-name new customer sends no existing code');
+    equal(customerSales[3].customer,'Trùng tên','Explicit same-name new customer retains entered name');
+    equal(customerSales[3].phone,'0987654321','Explicit same-name new customer sends own phone');
+    customerLoadFailure=true; await fresh();
+    equal(nodes.customerIsNew.checked,false,'Reopening invoice clears new-customer mode');
+    equal(nodes.saveOrder.disabled,true,'Customer database failure blocks unlinked invoice saves');
+    assert(nodes.orderFormError.textContent.includes('khách hàng'),'Customer load error visible');
+    await emit(form,'submit',{submitter:nodes.saveOrder}); equal(customerSales.length,4,'Customer load failure does not submit');
+    customerLoadFailure=false;
     catalog = [];
     await fresh();
     equal(nodes.saveOrder.disabled, true, 'No catalog blocks new sale');

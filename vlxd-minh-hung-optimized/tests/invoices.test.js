@@ -17,6 +17,8 @@ var document = {
     },
     addEventListener: function (type, fn) { if (type === 'DOMContentLoaded') domReady = fn; }
 };
+var bodyClasses = new Set();
+document.body = {classList: {add:function (name) { bodyClasses.add(name); }, remove:function (name) { bodyClasses.delete(name); }, contains:function (name) { return bodyClasses.has(name); }}};
 var setTimeout = function () { return 1; };
 var clearTimeout = function () {};
 var AbortController = function () { this.signal = {}; this.abort = function () {}; };
@@ -80,6 +82,10 @@ async function run() {
     equal(D.normalizeOrder({items:'[{"name":"Xi măng","qty":2,"price":90000}]'}).total, 180000, 'Items JSON từ Sheet');
     equal(D.normalizeOrder({items:[{name:'Xi măng',qty:2,unit:'bao',price:90000}]}).items[0].unit, 'bao', 'Giữ đơn vị tính từ CHITIET_HD');
     equal(D.normalizeOrder({items:[{name:'Xi măng',qty:2,price:90000}]}).items[0].unit, '', 'Đơn cũ không có ĐVT vẫn đọc được');
+    var customerOrder = D.normalizeOrder({id:'HD041120260001',customer:'Khách A',customerId:'KH000001',phone:'0900000001',total:100000,paid:40000,debt:60000});
+    equal(customerOrder.customerId,'KH000001','Chuẩn hóa hóa đơn giữ mã khách hàng');
+    equal(customerOrder.phone,'0900000001','Chuẩn hóa hóa đơn giữ số điện thoại');
+    equal(customerOrder.debt,60000,'Chuẩn hóa giữ công nợ hiệu lực sau thu tiền');
 
     requests.push({lastId:'HD031120260002'});
     await rejects(function () { return app.API.list(); }, 'Không biến lastId thành danh sách rỗng');
@@ -216,6 +222,41 @@ async function run() {
     equal(elements.p_partyLabel.textContent,'TÊN KHÁCH HÀNG:','Đặt lại nhãn khách');
     equal(elements.p_paidLabel.textContent,'KHÁCH TRẢ','Đặt lại nhãn khách trả');
     equal(elements.p_footerLabel.textContent,'NGƯỜI GIAO HÀNG','Đặt lại nhãn người giao');
+    var statement = {id:'CN041120260001',date:'2026-11-04',throughDate:'2026-11-05',customerId:'KH000001',
+        customer:{id:'KH000001',name:'Khách <img src=x>',phone:'0900000001',address:'Địa chỉ <script>'},
+        items:[{orderId:'HD<img>',date:'2026-11-04',total:150000,paid:50000,debt:100000},{orderId:'HD2',date:'2026-11-05',total:200000,paid:0,debt:200000}],
+        total:300000,paid:70000,debt:230000,status:'open',payments:[{id:'TT041120260001',date:'2026-11-04',amount:70000,note:'Thu <svg onload=x>'}]};
+    var debtPrinted=false;
+    window.print=function () { debtPrinted=true; assert(bodyClasses.has('printing-debt'),'Chỉ khung công nợ được chọn khi mở in'); };
+    app.Print.printStatement(statement);
+    assert(debtPrinted,'Mở cửa sổ in công nợ tổng');
+    assert(!bodyClasses.has('printing-debt'),'Kết thúc in trả lại chế độ giao diện thường');
+    equal(elements.d_customer.textContent,'Khách <img src=x>','Tên khách trên phiếu nợ được gán bằng textContent');
+    equal(elements.d_customerId.textContent,'KH000001','Phiếu nợ in đúng mã khách');
+    equal(elements.d_phone.textContent,'0900000001','Phiếu nợ in số điện thoại');
+    equal(elements.d_through.textContent,'Cập nhật đến: 05/11/2026','Phiếu nợ hiển thị ngày cập nhật của tổng đang mở');
+    assert(elements.d_table.innerHTML.includes('HD&lt;img&gt;'),'Mã hóa đơn trên phiếu nợ được escape');
+    assert(!elements.d_table.innerHTML.includes('HD<img>'),'Không chèn mã hóa đơn như HTML');
+    assert(elements.d_payments.innerHTML.includes('Thu &lt;svg onload=x&gt;'),'Ghi chú thu nợ khi in được escape');
+    equal(D.money(elements.d_total.textContent),300000,'Tổng công nợ là phần nợ của các đơn đã gộp');
+    equal(D.money(elements.d_paid.textContent),70000,'Phiếu tổng hiển thị các khoản đã thu sau khi gộp');
+    equal(D.money(elements.d_debt.textContent),230000,'Phiếu tổng hiển thị dư nợ hiệu lực');
+    equal(elements.d_status.textContent,'CHƯA TẤT TOÁN','Phiếu còn nợ giữ trạng thái mở');
+    window.print=function () {};
+    app.Print.printStatement({...statement,paid:300000,debt:0,status:'closed',payments:[]});
+    equal(elements.d_status.textContent,'ĐÃ TẤT TOÁN','Phiếu trả đủ in trạng thái kết thúc');
+    equal(D.money(elements.d_debt.textContent),0,'Phiếu tất toán không còn nợ');
+    assert(elements.d_payments.innerHTML.includes('Chưa ghi nhận'),'Phiếu không có lịch sử thu không giữ dữ liệu lần in trước');
+    app.Print.printStatement({...statement,total:1000.75,paid:1000.5,debt:0.25,
+        items:[{orderId:'HD1',date:'2026-11-04',total:1000.75,paid:0.5,debt:1000.25}],
+        payments:[{id:'TT1',date:'2026-11-04',amount:1000.5,note:''}]});
+    equal(D.money(elements.d_debt.textContent),0.25,'In công nợ giữ số dư lẻ từ dữ liệu cũ');
+    assert(elements.d_table.innerHTML.includes('1.000,75 đ'),'Các dòng phiếu công nợ không làm tròn tiền lẻ');
+    assert(elements.d_payments.innerHTML.includes('1.000,5 đ'),'Lịch sử thu trên bản in giữ tiền lẻ');
+    window.print=function () { throw new Error('Máy in không sẵn sàng'); };
+    expectThrow(function () { app.Print.printStatement(statement); },'Lỗi in vẫn được báo về giao diện');
+    assert(!bodyClasses.has('printing-debt'),'Lỗi in không để lại chế độ phiếu nợ');
+    expectThrow(function () { app.Print.printStatement({id:'CN1'}); },'Không in phiếu công nợ thiếu dữ liệu');
     print('PASS: ' + count + ' invoice behavior checks');
 }
 run().catch(function(error){ print('FAIL: ' + error.message + '\n' + error.stack); quit(1); });

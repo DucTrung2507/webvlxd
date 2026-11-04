@@ -101,5 +101,27 @@
         return result;
     }
 
-    app.API = {list, save, nextId, inventory, createProduct, receiveStock};
+    async function customers() {
+        const message = 'Chức năng khách hàng chưa được triển khai. Hãy cập nhật Apps Script rồi bấm Làm mới.';
+        let data;
+        try { data = await request('?action=customers'); } catch (error) {
+            if (/Yêu cầu không được hỗ trợ|customers\.gs/.test(error.message)) throw new Error(message);
+            throw error;
+        }
+        if (!data || data.schemaVersion !== 1 || !['customers', 'orders', 'statements', 'payments'].every(key => Array.isArray(data[key]))) throw new Error(message);
+        return data;
+    }
+
+    async function debtAction(action, payload) {
+        const result = await request('', {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+            body: JSON.stringify({...payload, action})});
+        if (!result.statement || !result.statement.id || !Array.isArray(result.statement.items)) {
+            throw new Error('Chưa nhận được xác nhận công nợ. Hãy làm mới và kiểm tra trước khi thử lại.');
+        }
+        return result;
+    }
+
+    app.API = {list, save, nextId, inventory, createProduct, receiveStock, customers,
+        createDebtStatement: payload => debtAction('createDebtStatement', payload),
+        payDebtStatement: payload => debtAction('payDebtStatement', payload)};
 }(window.InvoiceApp));
