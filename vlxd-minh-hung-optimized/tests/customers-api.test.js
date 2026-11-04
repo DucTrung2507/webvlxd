@@ -46,6 +46,19 @@ async function run() {
     await rejects(function () { return api.payDebtStatement({statementId: statement.id, amount: 100}); }, 'Server overpayment rejection propagated');
     responses.push(new Error('Mất kết nối'));
     await rejects(function () { return api.payDebtStatement({statementId: statement.id, amount: 10}); }, 'Network failure never reports success');
-    print('PASS: ' + checks + ' customer API checks (mock fetch)');
+    responses.push({status:'success',id:'HD041120260001'});
+    await rejects(function () { return api.updateOrder({id:'HD041120260001',baseVersion:0,requestId:'edit-key'}); }, 'Edit requires canonical order and version');
+    var edited={id:'HD041120260001',version:1,items:[{name:'Gạch',qty:2,unit:'viên',price:1000}],total:2000,paid:1000,debt:1000};
+    responses.push({status:'success',order:edited});
+    var updated=await api.updateOrder({...edited,baseVersion:0,requestId:'edit-key'});
+    equal(updated.version,1,'Edit returns committed version');
+    equal(updated.debt,1000,'Edit returns canonical debt');
+    body=JSON.parse(sent.at(-1).options.body);
+    equal(body.action,'updateOrder','Edit action routed correctly');
+    equal(body.baseVersion,0,'Edit optimistic version preserved');
+    equal(body.requestId,'edit-key','Edit retry key preserved');
+    responses.push({status:'error',message:'Hóa đơn đã thay đổi'});
+    await rejects(function () { return api.updateOrder({id:edited.id,baseVersion:0,requestId:'edit-key'}); }, 'Version conflict never reported as saved');
+    print('PASS: ' + checks + ' customer and edit API checks (mock fetch)');
 }
 run().catch(function (error) { print('FAIL: ' + error.message + '\n' + error.stack); quit(1); });

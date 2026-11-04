@@ -1,8 +1,14 @@
 (function (app) {
     'use strict';
     const {formatMoney, formatDate, filterOrders, sortOrders, normalizeOrder, escapeHtml: html} = app.Data;
-    const state = {orders: [], pending: new Map(), from: '', to: '', complete: false, error: '', request: 0};
+    const state = {orders: [], pending: new Map(), from: '', to: '', search: '', complete: false, error: '', request: 0};
     const get = id => document.getElementById(id);
+    const searchKey = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLocaleLowerCase('vi').trim();
+    function matchesSearch(order) {
+        const text = searchKey(state.search);
+        return !text || searchKey([order.id, order.customer, order.customerId, order.phone, order.address, order.shipper,
+            order.itemText, ...order.items.map(item => item.name)].join(' ')).includes(text);
+    }
 
     function allOrders() {
         const ids = new Set(state.orders.filter(order => order.id).map(order => order.id));
@@ -18,8 +24,8 @@
 
     function render() {
         const all = allOrders();
-        const visible = filterOrders(all, state.from, state.to);
-        const filtered = state.from || state.to;
+        const visible = filterOrders(all, state.from, state.to).filter(matchesSearch);
+        const filtered = state.from || state.to || state.search;
         const unknown = all.filter(order => !order.date).length;
         get('statsCount').textContent = visible.length.toLocaleString('vi-VN');
         ['total', 'paid', 'debt'].forEach(field => {
@@ -27,16 +33,17 @@
             get(target).textContent = formatMoney(visible.reduce((sum, order) => sum + order[field], 0));
         });
         let count = `Hiển thị ${visible.length} / ${all.length} hóa đơn`;
-        if (filtered) count += ` · ${state.from ? formatDate(state.from) : 'Từ trước'} — ${state.to ? formatDate(state.to) : 'Đến nay'}`;
-        if (unknown) count += ` · ${unknown} hóa đơn chưa rõ ngày${filtered ? ' không nằm trong kết quả lọc' : ''}`;
+        if (state.from || state.to) count += ` · ${state.from ? formatDate(state.from) : 'Từ trước'} — ${state.to ? formatDate(state.to) : 'Đến nay'}`;
+        if (state.search) count += ' · Tìm: ' + state.search;
+        if (unknown) count += ` · ${unknown} hóa đơn chưa rõ ngày${state.from || state.to ? ' không nằm trong kết quả lọc ngày' : ''}`;
         if (!state.complete) count += ' · Lịch sử chưa tải đầy đủ';
         get('resultCount').textContent = count;
         get('listStatus').hidden = !state.error;
         get('listStatus').textContent = state.error;
         const emptyMessage = !state.complete && !all.length ? 'Chưa tải được hóa đơn. Bấm Làm mới để thử lại.' :
-            filtered ? 'Không có hóa đơn trong khoảng ngày đã chọn.' : 'Chưa có hóa đơn nào.';
+            filtered ? 'Không có hóa đơn phù hợp với tìm kiếm và bộ lọc.' : 'Chưa có hóa đơn nào.';
         get('orderList').innerHTML = visible.length ? visible.map(order => `<tr>
-            <td>${html(order.id || 'Chưa có mã')}</td><td>${html(formatDate(order.date))}</td>
+            <td>${order.id ? `<button type="button" class="text-button" data-open-sale="${html(order.id)}">${html(order.id)}</button>` : 'Chưa có mã'}</td><td>${html(formatDate(order.date))}</td>
             <td>${html(order.customer || '—')}</td><td>${html(order.address || '—')}</td>
             <td>${renderItems(order)}</td><td class="money">${html(formatMoney(order.total))}</td>
             <td class="money">${html(formatMoney(order.paid))}</td><td class="money text-debt">${html(formatMoney(order.debt))}</td>
@@ -106,7 +113,14 @@
             get('filterError').hidden = true;
             get('toDate').removeAttribute('aria-invalid');
             state.from = state.to = '';
+            state.search = '';
+            get('orderSearch').value = '';
             render();
+        });
+        get('orderSearch').addEventListener('input', () => { state.search = get('orderSearch').value.trim(); render(); });
+        get('orderList').addEventListener('click', event => {
+            const button = event.target.closest('[data-open-sale]');
+            if (button && app.Order) app.Order.openExisting(button.getAttribute('data-open-sale'));
         });
         get('refreshOrders').addEventListener('click', load);
         load();

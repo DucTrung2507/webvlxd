@@ -8,6 +8,7 @@
     let state = {customers: [], orders: [], statements: [], payments: []};
     let loaded = false, lastError, pending, version = 0, selectedId = '', statementId = '';
     let creating = false, paying = false, paymentRequestId = '', paymentStatementId = '';
+    let customerReturnFocus;
     const createKeys = new Map();
 
     function label(customer) {
@@ -22,7 +23,12 @@
     function debtFor(id) { return ordersFor(id).reduce((sum, order) => sum + Math.max(0, D.money(order.debt)), 0); }
     function badge(statement) { return `<span class="status-badge${statement.status === 'closed' ? ' closed' : ''}">${statement.status === 'closed' ? 'Đã tất toán' : 'Đang mở'}</span>`; }
     function empty(cols, text) { return `<tr class="empty-row"><td colspan="${cols}">${esc(text)}</td></tr>`; }
-    function status(message) { get('customersStatus').textContent = message; get('customersStatus').hidden = !message; }
+    function status(message) {
+        ['customersStatus', 'customerDetailStatus'].forEach(id => {
+            get(id).textContent = message;
+            get(id).hidden = !message;
+        });
+    }
 
     function render() {
         get('customerOptions').innerHTML = state.customers.map(customer => `<option value="${esc(label(customer))}"></option>`).join('');
@@ -44,7 +50,10 @@
     function renderDetail() {
         const customer = state.customers.find(item => item.id === selectedId);
         get('customerDetail').hidden = !customer;
-        if (!customer) return;
+        if (!customer) {
+            if (get('customerDetailPanel').open && !creating && !paying) closeCustomerDetail();
+            return;
+        }
         get('customerDetailTitle').textContent = customer.name;
         get('customerDetailCode').textContent = customer.legacy ? 'Khách từ hóa đơn cũ · Cấp mã khi lập phiếu' : customer.id;
         get('customerDetailContact').textContent = [customer.phone, customer.address].filter(Boolean).join(' · ') || 'Chưa có thông tin liên hệ';
@@ -61,6 +70,26 @@
             <td><div class="table-actions"><button type="button" class="text-button" data-open-debt-statement="${esc(statement.id)}">Xem / In</button>${statement.status !== 'closed' ? `<button type="button" class="text-button" data-collect-debt="${esc(statement.id)}">Thu tiền</button>` : ''}</div></td></tr>`).join('') : empty(8, 'Chưa có phiếu tổng. Bấm Lập / In công nợ tổng để gộp các đơn còn nợ.');
         get('customerExportDebt').disabled = creating || debtFor(customer.id) <= 0;
         get('customerExportDebt').textContent = creating ? 'Đang lập phiếu…' : 'Lập / In công nợ tổng';
+    }
+
+    function openCustomerDetail(id) {
+        if (!state.customers.some(customer => customer.id === id)) return;
+        if (!get('customerDetailPanel').open) customerReturnFocus = document.activeElement;
+        selectedId = id;
+        renderDetail();
+        if (!get('customerDetailPanel').open) get('customerDetailPanel').showModal();
+    }
+
+    function closeCustomerDetail() {
+        if (creating || paying) return;
+        if (get('customerPaymentPanel').open) get('customerPaymentPanel').close();
+        if (get('debtStatementPanel').open) get('debtStatementPanel').close();
+        get('customerDetailPanel').close();
+        get('customerDetail').hidden = true;
+        selectedId = '';
+        statementId = '';
+        if (customerReturnFocus && customerReturnFocus.isConnected !== false) customerReturnFocus.focus();
+        else get('customerSearch').focus();
     }
 
     function renderStatement() {
@@ -216,9 +245,10 @@
         get('customerList').addEventListener('click', event => {
             const button = event.target.closest('[data-open-customer]');
             if (!button) return;
-            selectedId = button.getAttribute('data-open-customer'); renderDetail();
-            if (get('customerDetail').scrollIntoView) get('customerDetail').scrollIntoView({behavior: 'smooth', block: 'start'});
+            openCustomerDetail(button.getAttribute('data-open-customer'));
         });
+        document.querySelectorAll('[data-close-customer-detail]').forEach(button => button.addEventListener('click', closeCustomerDetail));
+        get('customerDetailPanel').addEventListener('cancel', event => { event.preventDefault(); closeCustomerDetail(); });
         get('customerExportDebt').addEventListener('click', createStatement);
         get('customerStatements').addEventListener('click', event => {
             const view = event.target.closest('[data-open-debt-statement]');

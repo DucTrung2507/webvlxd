@@ -2,7 +2,11 @@
 load('tests/ui-dom-fixture.js');
 ['customersStatus','customersCount','customersOwing','customersDebt','customersOpenStatements','customerList','customerOptions',
     'customerDetailTitle','customerDetailCode','customerDetailContact','customerOrderCount','customerStatementCount','customerOrders','customerStatements'].forEach(function (id) { add(id,'div'); });
-add('customerSearch','input'); add('customerDetail','section');
+add('customerSearch','input');
+var customerPanel=add('customerDetailPanel','dialog');
+add('customerDetail','section',customerPanel);nodes.customerDetail.hidden=true;
+add('customerDetailStatus','p',customerPanel);
+add('customerClose','button',customerPanel,{'data-close-customer-detail':''});
 ['customersRefresh','customerExportDebt'].forEach(function (id) { add(id,'button'); });
 var statementPanel=add('debtStatementPanel','dialog');
 ['debtStatementTitle','debtStatementMeta','debtStatementCustomer','debtStatementStatus','debtStatementItems','debtStatementTotal','debtStatementPaid','debtStatementDebt','debtStatementPayments'].forEach(function (id) { add(id,'div',statementPanel); });
@@ -69,7 +73,20 @@ async function run(){
     assert(!nodes.customerList.innerHTML.includes('KH000001'),'Search hides unrelated customers');
     nodes.customerSearch.value='không có';await emit(nodes.customerSearch,'input');assert(nodes.customerList.innerHTML.includes('Không tìm thấy'),'Search has distinct no-result message');
     nodes.customerSearch.value='';await emit(nodes.customerSearch,'input');
+    var inlineScrolls=0;nodes.customerDetail.scrollIntoView=function(){inlineScrolls++;};
+    equal(customerPanel.open,false,'Customer detail dialog initially closed');
+    nodes.customerSearch.focus();
     await choose('KH000001');equal(nodes.customerDetail.hidden,false,'Selecting customer opens details');equal(nodes.customerDetailTitle.textContent,customer.name,'Customer detail title uses textContent');
+    equal(customerPanel.open,true,'Selecting customer opens separate modal');
+    equal(nodes.customerDetail.parentElement,customerPanel,'Customer details are contained in their own dialog');
+    equal(inlineScrolls,0,'Choosing customer does not scroll open inline details');
+    await emit(nodes.customerClose,'click');equal(customerPanel.open,false,'Customer close button closes only customer modal');
+    equal(nodes.customerDetail.hidden,true,'Closing customer hides its previous detail content');
+    equal(document.activeElement,nodes.customerSearch,'Customer modal close restores prior focus');
+    await choose('KH000001');
+    var customerCancelled=false;await emit(customerPanel,'cancel',{preventDefault:function(){customerCancelled=true;}});
+    assert(customerCancelled,'Customer Escape uses controlled close lifecycle');equal(customerPanel.open,false,'Customer Escape closes dialog');
+    await choose('KH000001');
     assert(nodes.customerOrders.innerHTML.includes('CN041120260001'),'Order detail shows its statement membership');
     assert(!nodes.customerExportDebt.disabled,'Customer with debt can create or print total');
     await choose('KH000002');assert(nodes.customerExportDebt.disabled,'Customer paid or overpaid cannot create debt total');
@@ -85,15 +102,18 @@ async function run(){
 
     createResponses.push(new Error('Chưa xác nhận tạo phiếu'));await emit(nodes.customerExportDebt,'click');
     equal(created.length,1,'Create debt total submits one request');assert(nodes.customersStatus.textContent.includes('Chưa xác nhận'),'Create failure shown');
+    assert(nodes.customerDetailStatus.textContent.includes('Chưa xác nhận')&&!nodes.customerDetailStatus.hidden,'Create failure remains visible inside customer modal');
     var creating=deferred();createResponses.push(creating.promise);var retry=emit(nodes.customerExportDebt,'click');await settle();
     equal(created.length,2,'Retry resubmits once');equal(created[0].requestId,created[1].requestId,'Unconfirmed statement retry keeps stable request ID');
     assert(nodes.customerExportDebt.disabled,'Statement creation disables action');await emit(nodes.customerExportDebt,'click');equal(created.length,2,'In-flight statement creation cannot submit twice');
+    await emit(nodes.customerClose,'click');equal(customerPanel.open,true,'Customer modal stays open while statement creation pending');
     creating.resolve({statement:clone(original)});await retry;
     equal(statementPanel.open,true,'Canonical statement shown after creation');equal(nodes.debtStatementTitle.textContent,original.id,'Server statement code displayed');
     equal(printed.length,1,'Created statement prints once');equal(printed[0].id,original.id,'Print uses confirmed statement code');
     equal(app.Data.money(nodes.debtStatementDebt.textContent),100000,'Statement shows debt');
     await emit(nodes.debtStatementPrint,'click');equal(printed.length,2,'Saved statement can be printed again');
     await emit(nodes.statementClose,'click');equal(statementPanel.open,false,'Statement dialog closes');
+    equal(customerPanel.open,true,'Closing child statement retains customer dialog');
     await viewStatement(original.id);equal(statementPanel.open,true,'Existing statement can reopen');
     await emit(nodes.debtStatementCollect,'click');equal(paymentPanel.open,true,'Statement collect opens payment form');equal(document.activeElement,nodes.customerPaymentAmount,'Payment amount receives focus');
     equal(nodes.customerPaymentDate.value,app.Data.todayKey(),'Payment date defaults to Vietnam today');
@@ -146,6 +166,7 @@ async function run(){
         items:[{orderId:'legacy-order',date:'2026-11-01',total:1000.75,paid:0.5,debt:1000.25}],total:1000.25,paid:0,debt:1000.25,status:'open',payments:[]};
     createResponses.push({statement:legacyStatement});responses.push(new Error('Tải lại khách vừa cấp mã lỗi'));await emit(nodes.customerExportDebt,'click');
     equal(nodes.customerDetailCode.textContent,'KH000005','Confirmed legacy materialization changes detail to stable customer code even when refresh fails');
+    equal(customerPanel.open,true,'Customer modal survives confirmed legacy identity remap');
     equal(app.Customers.resolveCustomer('KH000005').name,'Khách cũ','New stable customer identity available immediately after confirmation');
     equal(app.Customers.resolveCustomer('legacy-v1'),undefined,'Confirmed materialization removes superseded virtual identity');
     assert(nodes.customerOrders.innerHTML.includes('legacy-order'),'Materialized customer keeps historical order detail after refresh error');

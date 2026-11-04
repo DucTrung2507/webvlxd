@@ -24,16 +24,31 @@
     function printStatement(statement) {
         if (!statement || !statement.id || !Array.isArray(statement.items)) throw new Error('Chưa có phiếu công nợ tổng hợp lệ để in.');
         const customer = statement.customer && typeof statement.customer === 'object' ? statement.customer : {};
+        const total = statement.items.reduce((sum, item) => sum + money(item.total), 0);
+        const paid = statement.items.reduce((sum, item) => sum + money(item.paid), money(statement.paid));
         const fields = {d_id: statement.id, d_date: 'Ngày lập: ' + formatDate(parseDate(statement.date)),
             d_through: 'Cập nhật đến: ' + formatDate(parseDate(statement.throughDate)),
             d_customer: customer.name || statement.customerName || '', d_customerId: statement.customerId || customer.id || '',
             d_phone: customer.phone || '', d_address: customer.address || '',
-            d_total: statementMoney(statement.total), d_paid: statementMoney(statement.paid), d_debt: statementMoney(statement.debt),
+            d_total: statementMoney(total), d_paid: statementMoney(paid), d_debt: statementMoney(statement.debt),
             d_status: statement.status === 'closed' ? 'ĐÃ TẤT TOÁN' : 'CHƯA TẤT TOÁN'};
         Object.entries(fields).forEach(([id, value]) => { document.getElementById(id).textContent = value; });
-        document.getElementById('d_table').innerHTML = statement.items.map((item, index) => `<tr>
-            <td>${index + 1}</td><td>${html(item.orderId)}</td><td>${html(formatDate(parseDate(item.date)))}</td>
-            <td>${html(statementMoney(item.total))}</td><td>${html(statementMoney(item.paid))}</td><td>${html(statementMoney(item.debt))}</td></tr>`).join('');
+        const groups = new Map();
+        statement.items.forEach(item => {
+            const date = parseDate(item.date, item.orderId);
+            if (!groups.has(date)) groups.set(date, []);
+            const goods = Array.isArray(item.goods) && item.goods.length ? item.goods : [{
+                name: `Hóa đơn ${item.orderId} (chưa có chi tiết hàng)`, qty: null, unit: '', price: null, subtotal: item.total
+            }];
+            goods.forEach(good => groups.get(date).push(good));
+        });
+        const quantity = value => value == null ? '—' : Number.isFinite(Number(value))
+            ? Number(value).toLocaleString('vi-VN', {maximumFractionDigits: 6}) : String(value);
+        document.getElementById('d_table').innerHTML = [...groups.entries()].sort(([a], [b]) =>
+            a && b ? a.localeCompare(b) : a ? -1 : b ? 1 : 0).map(([date, goods]) => goods.map((good, index) => `<tr>
+            ${index === 0 ? `<td rowspan="${goods.length}" class="debt-date">${html(formatDate(date))}</td>` : ''}
+            <td>${html(good.name)}</td><td>${html(quantity(good.qty))}</td><td>${html(good.unit || '—')}</td>
+            <td>${good.price == null ? '—' : html(statementMoney(good.price))}</td><td>${html(statementMoney(good.subtotal))}</td></tr>`).join('')).join('');
         document.getElementById('d_payments').innerHTML = (statement.payments || []).map(payment => `<tr>
             <td>${html(payment.id)}</td><td>${html(formatDate(parseDate(payment.date)))}</td>
             <td>${html(statementMoney(payment.amount))}</td><td>${html(payment.note || '')}</td></tr>`).join('') ||

@@ -170,9 +170,10 @@ function inventoryCommittedSales_(ss) {
   const hd = ss.getSheetByName(SHEET_HD), ct = ss.getSheetByName(SHEET_CT);
   if (!hd || !ct) return [];
   const committed = new Set(invoiceRows_(hd).map(function (row) { return String(row[0] || "").trim(); }));
-  return invoiceRows_(ct).filter(function (row) {
+  const sales = invoiceRows_(ct).filter(function (row) {
     return String(row[6] || "").trim() && committed.has(String(row[0] || "").trim());
   });
+  return typeof invoiceRevisionSales_ === "function" ? invoiceRevisionSales_(ss, sales, committed) : sales;
 }
 
 function inventoryStockUnits_(ss, products, receipts, sales) {

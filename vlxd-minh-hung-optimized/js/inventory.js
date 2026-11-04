@@ -24,6 +24,8 @@
 
     function productLabel(product) { return product.id + ' — ' + product.name; }
     const key = value => String(value || '').trim().replace(/\s+/g, ' ').normalize('NFC').toLocaleLowerCase('vi');
+    const searchKey = value => key(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+    const matchesSearch = (values, query) => !query || searchKey(values.join(' ')).includes(searchKey(query));
     function complete(product) {
         return product.status !== 'pending' && !!product.type && !!product.baseUnit && Array.isArray(product.units) &&
             product.units.length > 0 && product.units.every(unit => unit.unit && Number(unit.price) > 0 && Number(unit.factor) > 0);
@@ -35,37 +37,68 @@
         const product = findProduct(value);
         return product && complete(product) ? product : undefined;
     }
+    function getAvailability(productId, unit = '') {
+        const product = state.products.find(item => item.id === productId);
+        if (!product) return {known: false, qty: 0, unit};
+        const stock = state.stock.filter(item => item.productId === productId);
+        if (complete(product)) {
+            const selected = product.units.find(item => key(item.unit) === key(unit || product.baseUnit));
+            if (!selected) return {known: false, qty: null, unit};
+            const balance = stock.find(item => key(item.unit) === key(product.baseUnit));
+            return {known: true, qty: Number(balance ? balance.qty : 0) / Number(selected.factor), unit: selected.unit};
+        }
+        if (!unit) return {known: true, entries: stock.map(item => ({qty: item.qty, unit: item.unit})), qty: 0, unit: ''};
+        return {known: true, qty: stock.filter(item => key(item.unit) === key(unit)).reduce((sum, item) => sum + Number(item.qty), 0), unit};
+    }
+    function updateReceiptStock(row) {
+        const hint = row.querySelector('.receipt-stock');
+        const value = row.querySelector('.receipt-product').value.trim();
+        hint.hidden = !value;
+        if (!value) { hint.textContent = ''; return; }
+        const product = findProduct(value);
+        if (!product) { hint.textContent = 'Số lượng hiện có: 0 (hàng mới)'; return; }
+        const availability = getAvailability(product.id, row.querySelector('.receipt-unit').value.trim());
+        const entries = availability.entries || [availability];
+        hint.textContent = availability.qty === null ? 'Số lượng hiện có: chưa có quy đổi cho ĐVT này' :
+            'Số lượng hiện có: ' + entries.map(item => quantity(item.qty) + (item.unit ? ' ' + item.unit : '')).join('; ');
+    }
     function unitPrices(product) {
         return '<ul class="unit-prices">' + (product.units || []).map(unit =>
             `<li>${esc(unit.unit)}: <strong>${D.formatMoney(unit.price)}</strong><br><small>1 ${esc(unit.unit)} = ${quantity(unit.factor)} ${esc(product.baseUnit)}</small></li>`).join('') + '</ul>';
     }
 
     function render() {
-        const products = state.products.filter(complete);
-        const incomplete = state.products.filter(product => !complete(product));
-        get('productCount').textContent = products.length + ' mặt hàng đã hoàn thiện';
-        get('receiptCount').textContent = state.receipts.length + ' hóa đơn nhập';
-        get('stockCount').textContent = new Set(state.stock.map(item => item.productId)).size + ' mặt hàng';
+        const allProducts = state.products.filter(complete);
+        const productQuery = get('productSearch').value;
+        const warehouseQuery = get('warehouseSearch').value;
+        const products = allProducts.filter(product => matchesSearch([product.id, product.name, product.type, ...(product.units || []).map(unit => unit.unit)], productQuery));
+        const incomplete = state.products.filter(product => !complete(product) && matchesSearch([product.id, product.name, product.type], warehouseQuery));
+        const stock = state.stock.filter(item => matchesSearch([item.productId, item.name, item.unit], warehouseQuery));
+        get('productCount').textContent = (productQuery ? products.length + ' / ' + allProducts.length : products.length) + ' mặt hàng đã hoàn thiện';
+        get('stockCount').textContent = new Set(stock.map(item => item.productId)).size + ' mặt hàng' + (warehouseQuery ? ' phù hợp' : '');
         get('pendingCount').textContent = incomplete.length + ' mặt hàng cần bổ sung';
-        get('productOptions').innerHTML = products.map(product => `<option value="${esc(productLabel(product))}"></option>`).join('');
+        get('productOptions').innerHTML = allProducts.map(product => `<option value="${esc(productLabel(product))}"></option>`).join('');
         get('receiptProductOptions').innerHTML = state.products.map(product => `<option value="${esc(productLabel(product))}"></option>`).join('');
         get('productList').innerHTML = products.length ? products.map(product =>
             `<tr><td>${esc(product.id)}</td><td>${esc(product.name)}</td><td>${esc(product.type)}</td><td>${unitPrices(product)}</td><td><button type="button" class="text-button" data-edit-product="${esc(product.id)}">Cập nhật</button></td></tr>`).join('') :
-            '<tr class="empty-row"><td colspan="5">Chưa có mặt hàng hoàn thiện. Thêm mặt hàng hoặc bổ sung thông tin tại Kho.</td></tr>';
+            '<tr class="empty-row"><td colspan="5">' + (productQuery ? 'Không có mặt hàng phù hợp.' : 'Chưa có mặt hàng hoàn thiện. Thêm mặt hàng hoặc bổ sung thông tin tại Kho.') + '</td></tr>';
         get('pendingProducts').innerHTML = incomplete.length ? incomplete.map(product =>
             `<div class="pending-product" role="listitem"><div><strong>${esc(product.name)}</strong><small>${esc(product.id)} · Chưa được bán</small></div><button type="button" class="secondary" data-edit-product="${esc(product.id)}">Hoàn thiện</button></div>`).join('') :
-            '<p class="pending-empty">Không có mặt hàng chờ hoàn thiện.</p>';
-        get('stockList').innerHTML = state.stock.length ? state.stock.map(item =>
+            '<p class="pending-empty">' + (warehouseQuery ? 'Không có mặt hàng chờ phù hợp.' : 'Không có mặt hàng chờ hoàn thiện.') + '</p>';
+        get('stockList').innerHTML = stock.length ? stock.map(item =>
             `<tr><td>${esc(item.productId)}</td><td>${esc(item.name)}</td><td>${esc(item.unit || 'Chưa có ĐVT')}</td><td class="money">${quantity(item.qty)}</td></tr>`).join('') :
-            '<tr class="empty-row"><td colspan="4">Nhập kho để ghi nhận hàng hóa và số lượng.</td></tr>';
-        const receipts = D.sortOrders(state.receipts.map(receipt => ({...receipt, date: D.parseDate(receipt.date, receipt.id)})));
+            '<tr class="empty-row"><td colspan="4">' + (warehouseQuery ? 'Không có tồn kho phù hợp.' : 'Nhập kho để ghi nhận hàng hóa và số lượng.') + '</td></tr>';
+        const receipts = D.sortOrders(state.receipts.map(receipt => ({...receipt, date: D.parseDate(receipt.date, receipt.id)}))).filter(receipt =>
+            matchesSearch([receipt.id, receipt.supplier, receipt.address, D.formatDate(receipt.date), ...(receipt.items || []).flatMap(item => [item.name, item.productId, item.unit])], warehouseQuery));
+        get('receiptCount').textContent = (warehouseQuery ? receipts.length + ' / ' + state.receipts.length : receipts.length) + ' hóa đơn nhập';
         get('receiptList').innerHTML = receipts.length ? receipts.map(receipt => {
             const detail = (receipt.items || []).map(item => `<li>${esc(item.name)}: ${quantity(item.qty)} ${esc(item.unit)} × ${D.formatMoney(item.price)}</li>`).join('');
             return `<tr><td><button type="button" class="text-button" data-print-receipt="${esc(receipt.id)}" aria-label="In hóa đơn ${esc(receipt.id)}">${esc(receipt.id)}</button></td>
                 <td>${D.formatDate(receipt.date)}</td><td>${esc(receipt.supplier)}</td><td>${esc(receipt.address)}</td>
                 <td><details><summary>${(receipt.items || []).length} mặt hàng</summary><ul>${detail}</ul></details></td>
                 <td class="money">${D.formatMoney(receipt.total)}</td><td class="money">${D.formatMoney(receipt.paid)}</td><td class="money">${D.formatMoney(receipt.debt)}</td></tr>`;
-        }).join('') : '<tr class="empty-row"><td colspan="8">Chưa có hóa đơn nhập. Bấm Nhập kho để tạo phiếu đầu tiên.</td></tr>';
+        }).join('') : '<tr class="empty-row"><td colspan="8">' + (warehouseQuery ? 'Không có phiếu nhập phù hợp.' : 'Chưa có hóa đơn nhập. Bấm Nhập kho để tạo phiếu đầu tiên.') + '</td></tr>';
+        rows().forEach(updateReceiptStock);
     }
 
     function load(force = false) {
@@ -300,7 +333,7 @@
     function addRow() {
         const row = document.createElement('div');
         row.className = 'receipt-item';
-        row.innerHTML = `<div class="stt"></div><input class="receipt-product" type="text" list="receiptProductOptions" placeholder="Chọn hàng hoặc nhập tên mới" autocomplete="off" aria-label="Mặt hàng">
+        row.innerHTML = `<div class="stt"></div><div class="receipt-product-field"><input class="receipt-product" type="text" list="receiptProductOptions" placeholder="Chọn hàng hoặc nhập tên mới" autocomplete="off" aria-label="Mặt hàng"><small class="receipt-stock" aria-live="polite" hidden></small></div>
             <input class="receipt-qty" type="number" min="0" step="1" value="1" aria-label="Số lượng">
             <input class="receipt-unit" type="text" placeholder="bao, m³…" aria-label="Đơn vị tính" required>
             <input class="receipt-price" type="text" inputmode="numeric" placeholder="0" aria-label="Đơn giá nhập">
@@ -391,6 +424,8 @@
         });
         get('warehouseRefresh').addEventListener('click', () => load(true));
         get('productRefresh').addEventListener('click', () => load(true));
+        get('productSearch').addEventListener('input', render);
+        get('warehouseSearch').addEventListener('input', render);
         get('productBaseUnit').addEventListener('input', () => {
             const input = get('productBaseUnit');
             const previous = input.getAttribute('data-previous-base');
@@ -438,12 +473,13 @@
                 const unit = product.units.find(item => key(item.unit) === key(event.target.value));
                 if (unit) row.querySelector('.receipt-price').value = D.money(unit.price).toLocaleString('vi-VN');
             }
-            syncRows(); totals();
+            syncRows(); totals(); updateReceiptStock(row);
         }
         get('receiptItems').addEventListener('change', receiptChange);
         get('receiptItems').addEventListener('input', event => {
             if (event.target.matches('.receipt-product')) receiptChange(event);
             if (event.target.matches('.receipt-price')) formatInput(event.target);
+            if (event.target.matches('.receipt-unit')) updateReceiptStock(event.target.closest('.receipt-item'));
             totals();
         });
         get('receiptItems').addEventListener('keydown', event => {
@@ -472,5 +508,5 @@
         });
     });
 
-    app.Inventory = {load, ensureLoaded, resolveProduct, showView, getProducts: () => state.products.filter(complete)};
+    app.Inventory = {load, ensureLoaded, resolveProduct, showView, getAvailability, getProducts: () => state.products.filter(complete)};
 }(window.InvoiceApp));

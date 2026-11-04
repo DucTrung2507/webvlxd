@@ -1,10 +1,10 @@
 # Hóa đơn, kho, khách hàng và công nợ tổng
 
-Đã triển khai Apps Script **phiên bản 14 ngày 04/11/2026**, bổ sung hồ sơ khách hàng và phiếu công nợ tổng cộng dồn. API kho giữ `schemaVersion: 2`, API khách hàng dùng `schemaVersion: 1`. Đơn mới nối vào phiếu đang mở; thu đủ sẽ tất toán phiếu, các đơn phát sinh sau thuộc đợt công nợ tiếp theo.
+Đã triển khai Apps Script **phiên bản 15 ngày 04/11/2026**, bổ sung xem/sửa/in lại hóa đơn, cửa sổ công nợ riêng, tìm kiếm và số tồn trên dòng hàng. Bản in công nợ có chi tiết hàng hóa gộp theo ngày. API kho giữ `schemaVersion: 2`, API khách hàng dùng `schemaVersion: 1`.
 
 Mô tả đầy đủ luồng sử dụng, dữ liệu, API, cơ chế tính tồn, xử lý lỗi và giới hạn hiện tại: [Luồng web và kỹ thuật](../docs/LUONG-WEB-VA-KY-THUAT.md).
 
-Giữ sáu file sau trong **cùng dự án Apps Script** đang kết nối với website. Cập nhật các file hiện có, thêm `customers.gs` và `customer-debt.gs`:
+Giữ bảy file sau trong **cùng dự án Apps Script** đang kết nối với website. Cập nhật các file hiện có và thêm `invoice-edit.gs`:
 
 | File | Chức năng |
 | --- | --- |
@@ -14,6 +14,7 @@ Giữ sáu file sau trong **cùng dự án Apps Script** đang kết nối với
 | [inventory.gs](inventory.gs) | Danh mục, phiếu nhập, tính tồn kho và kiểm tra tồn khi bán |
 | [customers.gs](customers.gs) | Hồ sơ KH, nhận diện khách và liên kết hóa đơn cũ/mới |
 | [customer-debt.gs](customer-debt.gs) | Phiếu công nợ cộng dồn, thu tiền, phân bổ và tất toán |
+| [invoice-edit.gs](invoice-edit.gs) | Lịch sử sửa hóa đơn, kiểm tra phiên bản và tính kho theo bản hiệu lực |
 
 Chỉ giữ một bộ cấu hình, một `doGet`, một `doPost` và một `generateId`. Nếu đã chép các mẫu `Code.gs` hoặc `ListOrders.gs` trước đây, bỏ phần mã mẫu trùng. Tên các hàm đang gán cho nút trên Sheet vẫn giữ nguyên: `luuHoaDon`, `luuVaInHoaDon`, `taoHD`, `taoSoHoaDonTuDong`.
 
@@ -29,6 +30,7 @@ Mã dùng bảng tính `1TfROVVl8D3d3UpbwvNADxg7elcCUmbgQZMfTQi8IyQw`. Các tab 
 | `KHACHHANG` | `customerId`, `name`, `phone`, `address`, `createdAt`, `legacyKey` |
 | `CONGNO_TONG` | `id`, `customerId`, `date`, `throughDate`, `customer`, `items`, `total`, `requestId`, `requestHash`, `requestAliases` |
 | `THU_CONGNO` | `id`, `statementId`, `customerId`, `date`, `amount`, `note`, `allocations`, `requestId`, `requestHash`, `closingSnapshot` |
+| `SUAHOADON` | `orderId`, `version`, `order`, `requestId`, `requestHash`, `baseVersion`, `createdAt` |
 
 Đọc danh sách không tự tạo tab hay ghi dữ liệu. Các tab mới có dữ liệu nhưng tiêu đề không đúng sẽ báo lỗi để kiểm tra; mã không ghi đè dữ liệu đó. Các tab cũ `NHAPHANG`, `KHO`, `TKNHAPHANG` được giữ nguyên và không dùng làm nguồn tồn kho mới.
 
@@ -55,16 +57,25 @@ Chi tiết lịch sử vẫn đọc được hai cấu trúc trong cùng tab `CH
 - Mọi hóa đơn bán mới phải dùng mặt hàng đã hoàn thiện và ĐVT đã cấu hình, kể cả khi danh mục đang trống. Máy chủ gộp nhu cầu cùng mặt hàng sau quy đổi rồi kiểm tra tồn dưới khóa. Mẫu `IN` nối theo tên duy nhất: mặt hàng chỉ có một ĐVT được dùng ĐVT đó; mặt hàng nhiều ĐVT bị chặn vì mẫu chưa xác định ô chọn ĐVT.
 - Trong biểu mẫu bán, chọn ĐVT tự điền giá bán tương ứng; vẫn được sửa giá trên dòng. Mọi thay đổi tên hàng, ĐVT, số lượng, giá hoặc xóa dòng làm trống **Khách trả**. Số lượng cho nhập thập phân; nút/phím tăng giảm tới số nguyên liền kề, ví dụ 2,3 tăng thành 3, giảm thành 2; số 0 vẫn bị chặn khi lưu.
 
+## Xem, sửa và tìm hóa đơn
+
+- Bấm mã HD để mở biểu mẫu xem chỉ đọc, giữ đúng các số tiền đã lưu. Nút **In lại** dùng bản đã lưu; **Chỉnh sửa** chuyển cùng cửa sổ sang chế độ sửa. Hủy chỉnh sửa khôi phục bản đang lưu. Lỗi tải danh mục vẫn cho xem/in nhưng khóa sửa.
+- `updateOrder` cần `id`, `baseVersion`, `requestId` và nội dung hóa đơn. Máy chủ giữ mã/ngày hóa đơn, kiểm tra tồn bằng cách trả lượng cũ vào phép tính trước khi áp lượng mới, rồi ghi một dòng JSON hoàn chỉnh vào `SUAHOADON`. Không sửa/xóa các dòng `HOADON`/`CHITIET_HD` gốc. `version` ban đầu là 0, mỗi lần sửa tăng 1; phiên bản cũ bị từ chối, retry cùng mã/nội dung không trừ kho thêm.
+- Hóa đơn thuộc phiếu tổng đang mở được sửa khi giữ nguyên khách và không giảm nợ xuống thấp hơn tiền đã thu/phá bản phân bổ. Khoản thu qua phiếu tổng giữ nguyên; ô Khách trả lúc sửa dùng số trả ban đầu, hiển thị riêng tiền đã thu thêm. Hóa đơn thuộc phiếu đã tất toán khóa sửa và nêu lý do; vẫn xem/in được.
+- Hóa đơn tìm theo mã, khách, điện thoại, địa chỉ, người giao hoặc tên hàng; kết hợp bộ lọc ngày. Kho tìm phiếu nhập, tồn và hàng chờ; Mặt hàng tìm mã/tên/loại/ĐVT. Tìm không phân biệt dấu và hoa/thường; chỉ lọc hiển thị, không sửa số tồn.
+- Dưới tên hàng trong biểu mẫu bán/nhập có **Số lượng hiện có** theo ĐVT chọn. Hàng hoàn thiện quy đổi từ tồn ĐVT gốc; hàng chờ hiện lượng theo ĐVT đã nhập. Đây là lượng kho đang tải, chưa trừ số lượng của bản nháp và không phải xác nhận giữ chỗ; máy chủ kiểm tra lại khi lưu.
+
 ## Khách hàng và công nợ tổng
 
 - Mục **Khách hàng** cùng cấp với Hóa đơn, Kho và Mặt hàng. Khi lưu hóa đơn cho khách mới, máy chủ cấp mã `KH000001` và liên kết các đơn bằng mã này; tên khách không phải khóa duy nhất.
 - Chọn khách trong gợi ý để gửi đúng `customerId`, tự điền điện thoại/địa chỉ. Ô **Khách mới / khách trùng tên** bỏ việc tự chọn theo tên; cần điện thoại hoặc địa chỉ phân biệt. Máy chủ vẫn đối chiếu để tránh tạo trùng: mã KH là lựa chọn rõ ràng; sau đó đến số điện thoại chuẩn hóa; khi không có điện thoại thì dùng tên + địa chỉ đã chuẩn hóa. Cùng tên/địa chỉ nhưng điện thoại khác được tách KH; không có đủ thông tin để phân biệt thì yêu cầu chọn mã. Địa chỉ giao hàng mới khi đã chọn mã không làm sinh khách khác.
 - Hóa đơn lịch sử chưa có K được nhóm chỉ đọc theo tên + địa chỉ, có mã tạm `LEGACY:...`. Khi lần đầu lập phiếu tổng hoặc lưu đơn cùng nhóm, máy chủ cấp KH thật và lưu `legacyKey`; các đơn cũ liên kết khi đọc, không ghi lại các dòng lịch sử.
+- Bấm **Xem công nợ** mở cửa sổ riêng của đúng khách, gồm thông tin liên hệ, các phiếu tổng và các đơn hàng; không ghép chi tiết vào danh sách khách bên dưới.
 - Bấm **Lập / In công nợ tổng** để gộp các đơn còn nợ chưa thuộc phiếu khác. Mỗi khách chỉ có một phiếu đang mở, mã `CNddMMyyyyNNNN`. Nếu đã có phiếu mở, thao tác trả lại phiếu đó; các đơn mới còn nợ được gắn mã phiếu tại L của HOADON và cộng vào cùng phiếu. Đơn đã trả đủ không làm tăng phiếu.
 - **Thu tiền** cho phép thu một phần hoặc thu đủ, ghi mã `TTddMMyyyyNNNN`, ngày và ghi chú. Khoản thu phải dương và không vượt số nợ còn lại; máy chủ phân bổ vào đơn cũ trước (ngày rồi mã đơn). Lần thu lưu một dòng với `allocations` JSON, nên retry cùng requestId không thu trùng hoặc phân bổ dở dang.
 - Khi thu đủ, cùng dòng thu tiền lưu `closingSnapshot` chốt danh sách và số tiền, phiếu chuyển `closed` và không nhận đơn mới. Đơn phát sinh sau đó chờ đợt tiếp theo; bấm lập công nợ lần sau tạo phiếu mới. Khách có nhiều phiếu theo các đợt, có thể xem/in lại phiếu cũ.
-- F/G của hóa đơn gốc luôn là số trả/nợ lúc lập. API cộng khoản thu đã phân bổ để trả `paid`/`debt` hiện tại và giữ `originalPaid`, `originalDebt`, `debtPaid` khi cần. Tổng nợ khách là tổng các đơn còn nợ sau thu; phần trả dư được hiển thị riêng, không tự bù trừ.
-- Phiếu công nợ dùng mẫu in riêng A4, gồm mã/tên/điện thoại/địa chỉ khách, các đơn thành phần, tổng nợ, đã thu, còn lại, lịch sử thu và trạng thái. Đây là bảng tổng công nợ, không tạo thêm hóa đơn bán hoặc trừ kho lần nữa. Hóa đơn bán/nhập vẫn dùng mẫu A5.
+- F/G của hóa đơn gốc luôn là số trả/nợ lúc lập; nếu có chỉnh sửa, API lấy số gốc của bản hiệu lực trong SUAHOADON. API cộng khoản thu đã phân bổ để trả `paid`/`debt` hiện tại và giữ `originalPaid`, `originalDebt`, `debtPaid` khi cần. Tổng nợ khách là tổng các đơn còn nợ sau thu; phần trả dư được hiển thị riêng, không tự bù trừ.
+- Phiếu công nợ dùng mẫu in riêng A4, liệt kê từng hàng hóa theo ngày hóa đơn với tên, số lượng, ĐVT, đơn giá và thành tiền. Các dòng cùng ngày dùng ô ngày gộp. Tổng tiền là tổng giá trị các đơn được gộp; Đã trả gồm trả ban đầu của các đơn và các khoản thu theo phiếu; Nợ lại vẫn là dư nợ hiệu lực. Phiếu cũng giữ mã/thông tin khách, lịch sử thu và trạng thái. Chi tiết hàng hóa nằm trong `goods` của dòng phiếu; bản chốt tất toán giữ nội dung để in lại. Đây là bảng tổng công nợ, không tạo thêm hóa đơn bán hoặc trừ kho lần nữa. Hóa đơn bán/nhập vẫn dùng mẫu A5.
 
 Các thao tác lưu dùng cùng `LockService.getScriptLock()`. Với phiếu nhập và đơn bán theo dõi tồn, chi tiết được ghi trước, dòng tổng được ghi cuối làm dấu hoàn tất. Chi tiết còn dang dở không cộng/trừ tồn; mã của chúng vẫn được bỏ qua khi cấp số tiếp theo để không ghép nhầm vào chứng từ khác. Những dòng này không bị tự xóa.
 
@@ -82,13 +93,14 @@ Website gửi `requestId` ổn định cho mỗi lần tạo/cập nhật mặt 
 | `POST` với `action: "receiveStock"` | `{status: "success", receipt: {...}, stock: [...], products: [...]}` |
 | `POST` hóa đơn hiện có | `{status: "success", id: "...", order: {...}}`; gửi `customerId`/`phone` để liên kết |
 | `POST action: "createDebtStatement"` | Gửi `{customerId, requestId}`; trả `{status: "success", statement, customerId}` |
+| `POST action: "updateOrder"` | Gửi `{id, baseVersion, requestId, ...nội dung hóa đơn}`; trả `{status: "success", order}` |
 | `POST action: "payDebtStatement"` | Gửi `{statementId, amount, date, note, requestId}`; trả `{status: "success", payment, statement}` |
 
 `product` gồm `{id, name, type, price, units, status, legacyUnit, baseUnit}`. GET kho bổ sung `receivedUnits` và `requiresLegacyUnit` phục vụ hoàn thiện. `stock` gồm `{productId, name, unit, qty}`, dùng ĐVT gốc cho hàng hoàn thiện hoặc ĐVT nhập cho hàng chờ. Dòng nhập gồm `{productId, name, qty, unit, price, subtotal}`; khi nhập tên mới, gửi `name` và để trống `productId`. Ô ngày theo múi giờ Việt Nam; lọc hóa đơn từ ngày/đến ngày chạy trên website và bao gồm cả hai mốc.
 
 ## Cập nhật deployment
 
-1. Cập nhật cả sáu file `.gs` trong bảng trên, gồm `customers.gs` và `customer-debt.gs`, trong cùng dự án Apps Script.
+1. Cập nhật cả bảy file `.gs` trong bảng trên, gồm `customers.gs`, `customer-debt.gs` và `invoice-edit.gs`, trong cùng dự án Apps Script.
 2. Chọn **Deploy → Manage deployments**, mở Web app có URL `/exec` đang dùng trên website, bấm sửa, chọn **New version**, rồi **Deploy**. Giữ cấu hình người thực thi và quyền truy cập hiện tại. Cách này giữ nguyên URL; chỉ lưu file mà chưa cập nhật deployment thì website vẫn dùng mã cũ.
 3. Kiểm tra `/exec?action=list` trả `orders`, `/exec?action=inventory` trả `schemaVersion: 2`, và `/exec?action=customers` trả `schemaVersion: 1` cùng `customers`, `orders`, `statements`, `payments`. Bước đọc không tạo tab hoặc tự sửa dữ liệu cũ; giao diện chặn API chưa đủ chức năng.
 4. Trở lại website và bấm **Làm mới**. Hoàn thiện các mặt hàng cũ/chờ trong Kho, khai báo đầy đủ ĐVT/giá/quy đổi và ánh xạ ĐVT cũ nếu cần. Có thể tạo danh mục trước rồi nhập, hoặc nhập tên mới rồi hoàn thiện trước khi bán. Để trống ngày hoặc bấm **Xem tất cả** để xem toàn bộ lịch sử hóa đơn.

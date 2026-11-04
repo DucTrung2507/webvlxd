@@ -60,6 +60,7 @@ function invoiceList_(sheets) {
     };
   });
   const ss = sheets.ss || (typeof SpreadsheetApp !== "undefined" ? SpreadsheetApp.openById(SPREADSHEET_ID) : null);
+  if (typeof invoiceRevisionOrders_ === "function") orders = invoiceRevisionOrders_(ss, orders);
   if (typeof customersAttachOrders_ === "function") orders = customersAttachOrders_(ss, orders);
   if (typeof debtApplyPayments_ === "function") orders = debtApplyPayments_(ss, orders);
   return orders;
@@ -194,6 +195,10 @@ function doPost(e) {
     if (!e || !e.postData || !e.postData.contents) throw new Error("Thiếu dữ liệu hóa đơn.");
     // Kiểm tra tất cả mặt hàng trước khi ghi dòng đầu tiên.
     const input = JSON.parse(e.postData.contents);
+    if (input && input.action === "updateOrder") {
+      if (typeof invoiceUpdate_ !== "function") throw new Error("Cần bổ sung file invoice-edit.gs để chỉnh sửa hóa đơn.");
+      return invoiceJson_(invoiceUpdate_(input));
+    }
     if (input && (input.action === "createDebtStatement" || input.action === "payDebtStatement")) {
       if (typeof debtMutate_ !== "function") throw new Error("Cần bổ sung file customer-debt.gs để sử dụng công nợ khách hàng.");
       return invoiceJson_(debtMutate_(input));

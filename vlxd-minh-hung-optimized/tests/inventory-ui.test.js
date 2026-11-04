@@ -6,6 +6,7 @@ load('tests/ui-dom-fixture.js');
 });
 ['productStatus','inventoryStatus','productCount','receiptCount','stockCount','pendingCount','pendingProducts','productList','receiptList','stockList','productOptions','receiptProductOptions'].forEach(function (id) { add(id, 'div'); });
 ['warehouseRefresh','productRefresh'].forEach(function (id) { add(id, 'button'); });
+['productSearch','warehouseSearch'].forEach(function (id) { add(id, 'input'); });
 ['product','receipt'].forEach(function (kind) {
     add(kind + 'Open', 'button', body, {['data-open-' + kind]:''});
     var panel = add(kind + 'Panel', 'dialog'), form = add(kind + 'Form', 'form', panel);
@@ -232,6 +233,30 @@ async function run() {
     await emit(nodes.productForm,'submit'); equal(productsSent.length,3,'Configured units must include base unit');
     equal(document.activeElement,nodes.productBaseUnit,'Missing base unit row focuses base field');
     await emit(nodes.productClose,'click');
+    nodes.productSearch.value='gach moi'; await emit(nodes.productSearch,'input');
+    assert(nodes.productList.innerHTML.includes('MH0003'),'Product search ignores Vietnamese accents');
+    assert(!nodes.productList.innerHTML.includes('MH0001'),'Product search hides unrelated rows');
+    assert(nodes.productOptions.innerHTML.includes('MH0001'),'Catalog search does not remove sales suggestions');
+    nodes.productSearch.value='nothing-exists'; await emit(nodes.productSearch,'input');
+    assert(nodes.productList.innerHTML.includes('Không có mặt hàng phù hợp'),'Product search empty result explained');
+    nodes.productSearch.value=''; await emit(nodes.productSearch,'input');
+    nodes.warehouseSearch.value=canonical.id; await emit(nodes.warehouseSearch,'input');
+    assert(nodes.receiptList.innerHTML.includes(canonical.id),'Warehouse search finds receipt code');
+    assert(nodes.stockList.innerHTML.includes('Không có tồn kho phù hợp'),'Warehouse results do not show unrelated stock');
+    nodes.warehouseSearch.value='xi mang'; await emit(nodes.warehouseSearch,'input');
+    assert(nodes.stockList.innerHTML.includes('MH0001'),'Warehouse stock search ignores accents');
+    nodes.warehouseSearch.value=''; await emit(nodes.warehouseSearch,'input');
+    equal(app.Inventory.getAvailability('MH0001','bao').qty,2,'Availability reports current base stock');
+    equal(app.Inventory.getAvailability('MH0001','kg').qty,100,'Availability converts into chosen unit');
+    equal(app.Inventory.getAvailability('MH0001','wrong').qty,null,'Unknown conversion does not falsely report zero');
+    await emit(nodes.receiptOpen,'click'); await select(0,'MH0001');
+    assert(field(0,'.receipt-stock').textContent.includes('2 bao'),'Receipt shows stock beneath selected product');
+    await input(0,'.receipt-unit','kg');
+    assert(field(0,'.receipt-stock').textContent.includes('100 kg'),'Receipt stock hint follows selected unit');
+    await input(0,'.receipt-product','Sản phẩm hoàn toàn mới');
+    assert(field(0,'.receipt-stock').textContent.includes('0 (hàng mới)'),'Unknown product has explicit zero-stock hint');
+    await select(0,''); equal(field(0,'.receipt-stock').hidden,true,'Cleared name hides stock hint');
+    await emit(nodes.receiptClose,'click');
     print('PASS: '+checks+' inventory UI checks (production listeners, fake DOM, no network)');
 }
 run().catch(function (error) { print('FAIL: '+error.message+'\n'+error.stack); quit(1); });

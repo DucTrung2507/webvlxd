@@ -64,12 +64,24 @@ function debtJson_(value, label) {
   catch (error) { throw new Error(label + " chứa dữ liệu JSON không hợp lệ."); }
 }
 
+function debtGoods_(goods) {
+  if (goods === undefined || goods === null) return [];
+  if (!Array.isArray(goods)) throw new Error("Chi tiết hàng hóa trên phiếu công nợ không hợp lệ.");
+  return goods.map(function (item) {
+    if (!item || typeof item !== "object") throw new Error("Chi tiết hàng hóa công nợ không hợp lệ.");
+    const qty = Number(String(item.qty == null ? "" : item.qty).replace(",", "."));
+    const price = invoiceNumber_(item.price, "Đơn giá hàng hóa công nợ"), subtotal = invoiceNumber_(item.subtotal, "Thành tiền hàng hóa công nợ");
+    if (!Number.isFinite(qty) || qty < 0 || price < 0 || subtotal < 0) throw new Error("Số lượng hoặc tiền hàng công nợ không hợp lệ.");
+    return {name: String(item.name || ""), qty: qty, unit: String(item.unit || ""), price: price, subtotal: subtotal};
+  });
+}
+
 function debtItem_(item) {
   if (!item || typeof item !== "object" || !String(item.orderId || "").trim()) throw new Error("Phiếu công nợ có dòng thiếu mã hóa đơn.");
   const debt = debtMoneyUnits_(item.debt, "Nợ của hóa đơn");
   if (debt <= 0) throw new Error("Phiếu công nợ chỉ gồm các hóa đơn còn nợ.");
   return {orderId: String(item.orderId).trim(), date: debtOrderDate_(item.date, item.orderId), total: debtMoneyUnits_(item.total, "Tổng hóa đơn") / 100,
-    paid: debtMoneyUnits_(item.paid, "Đã trả của hóa đơn") / 100, debt: debt / 100};
+    paid: debtMoneyUnits_(item.paid, "Đã trả của hóa đơn") / 100, debt: debt / 100, goods: debtGoods_(item.goods)};
 }
 
 function debtOriginal_(order) {
@@ -91,6 +103,11 @@ function debtNextId_(prefix, rows) {
 
 function debtState_(ss, orders) {
   const statementTable = debtReadTable_(ss, "statements"), paymentTable = debtReadTable_(ss, "payments");
+  const closingItems = new Map();
+  paymentTable.rows.filter(function (row) { return !!row[9]; }).forEach(function (row) {
+    const id = String(row[1] || "").trim(), snapshot = debtJson_(row[9], "Chốt phiếu công nợ");
+    if (!closingItems.has(id)) closingItems.set(id, Array.isArray(snapshot.items) ? snapshot.items.map(debtItem_) : []);
+  });
   const byOrder = new Map(), byStatement = new Map(), owner = new Map(), requestIds = new Set(), aliases = new Map();
   orders.forEach(function (order) {
     const id = String(order.id || "").trim();
@@ -111,6 +128,20 @@ function debtState_(ss, orders) {
     });
     const total = items.reduce(function (sum, item) { return debtAdd_(sum, debtMoneyUnits_(item.debt)); }, 0);
     if (total !== debtMoneyUnits_(row[6], "Tổng phiếu công nợ")) throw new Error("Tổng phiếu công nợ không khớp chi tiết.");
+    // Kiểm tra snapshot gốc trước; phiếu đang mở mới dùng nội dung sửa đã được kiểm duyệt.
+    items.forEach(function (item, index) {
+      const order = byOrder.get(item.orderId);
+      const closed = closingItems.get(id);
+      if (closed) {
+        const frozen = closed.find(function (entry) { return entry.orderId === item.orderId; });
+        if (frozen) items[index] = frozen;
+        if (!items[index].goods.length) items[index].goods = debtGoods_(order.items);
+      } else if (Number(order.version || 0) > 0) {
+        const original = debtOriginal_(order);
+        items[index] = debtItem_({orderId: order.id, date: order.date, total: order.total,
+          paid: original.paid / 100, debt: original.debt / 100, goods: order.items});
+      } else if (!item.goods.length) item.goods = debtGoods_(order.items);
+    });
     const requestId = String(row[7] || "");
     if (!requestId || requestIds.has(requestId)) throw new Error("Mã yêu cầu công nợ bị thiếu hoặc trùng.");
     requestIds.add(requestId);
@@ -134,7 +165,7 @@ function debtState_(ss, orders) {
     if (!statement || statement.customerId !== order.customerId || (owner.has(order.id) && owner.get(order.id) !== statementId)) throw new Error("Liên kết hóa đơn với phiếu công nợ không hợp lệ.");
     if (!owner.has(order.id)) {
       const original = debtOriginal_(order);
-      const item = debtItem_({orderId: order.id, date: order.date, total: order.total, paid: original.paid / 100, debt: original.debt / 100});
+      const item = debtItem_({orderId: order.id, date: order.date, total: order.total, paid: original.paid / 100, debt: original.debt / 100, goods: order.items});
       statement.items.push(item); owner.set(order.id, statementId);
     }
   });
@@ -176,6 +207,7 @@ function debtState_(ss, orders) {
         throw new Error("Bản chốt công nợ không khớp các hóa đơn hoặc số tiền tất toán.");
       }
       statement.items = closedItems;
+      statement.items.forEach(function (item) { if (!item.goods.length) item.goods = debtGoods_(byOrder.get(item.orderId).items); });
       statement.total = closedTotal / 100;
       statement._closed = true;
       statement.closedAt = payment.date;
@@ -204,10 +236,13 @@ function debtApplyPayments_(ss, orders) {
   const state = debtState_(ss, orders);
   return orders.map(function (order) {
     const paid = state.allocationsByOrder.get(order.id) || 0;
-    if (!paid && order.originalPaid === undefined) return order;
+    const statement = state.statements.find(function (entry) { return entry.id === state.owner.get(order.id); });
+    const metadata = {debtStatementId: statement ? statement.id : String(order.debtStatementId || ""), canEdit: !statement || statement.status !== "closed",
+      editBlockedReason: statement && statement.status === "closed" ? "Hóa đơn thuộc phiếu công nợ " + statement.id + " đã tất toán, không thể chỉnh sửa." : ""};
+    if (!paid && order.originalPaid === undefined) return Object.assign({}, order, metadata);
     const original = debtOriginal_(order);
     return Object.assign({}, order, {originalPaid: original.paid / 100, originalDebt: original.debt / 100,
-      debtPaid: paid / 100, paid: debtAdd_(original.paid, paid) / 100, debt: (original.debt - paid) / 100});
+      debtPaid: paid / 100, paid: debtAdd_(original.paid, paid) / 100, debt: (original.debt - paid) / 100}, metadata);
   });
 }
 
@@ -264,7 +299,7 @@ function debtMutate_(data) {
       context = customersContext_(ss); state = debtState_(ss, context.orders);
       const items = context.orders.filter(function (order) {
         return order.customerId === customer.id && !state.owner.has(order.id) && debtMoneyUnits_(order.debt, "Nợ hóa đơn", true) > 0;
-      }).map(function (order) { return debtItem_({orderId: order.id, date: order.date, total: order.total, paid: order.paid, debt: order.debt}); });
+      }).map(function (order) { return debtItem_({orderId: order.id, date: order.date, total: order.total, paid: order.paid, debt: order.debt, goods: order.items}); });
       items.sort(function (a, b) { return a.date.localeCompare(b.date) || a.orderId.localeCompare(b.orderId); });
       if (!items.length) throw new Error("Không có hóa đơn nợ để lập phiếu.");
       const date = debtDate_(), total = items.reduce(function (sum, item) { return debtAdd_(sum, debtMoneyUnits_(item.debt)); }, 0) / 100;

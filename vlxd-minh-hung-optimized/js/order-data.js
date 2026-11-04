@@ -87,6 +87,12 @@ window.InvoiceApp = window.InvoiceApp || {};
             id: String(raw.id ?? '').trim(), date: parseDate(raw.date, raw.id),
             customer: String(raw.customer ?? ''), customerId: String(raw.customerId ?? ''), phone: String(raw.phone ?? ''), address: String(raw.address ?? ''),
             shipper: String(raw.shipper ?? ''), items, itemText, total, paid,
+            version: Number.isSafeInteger(Number(raw.version)) && Number(raw.version) >= 0 ? Number(raw.version) : 0,
+            canEdit: raw.canEdit !== false, editBlockedReason: String(raw.editBlockedReason ?? ''),
+            debtStatementId: String(raw.debtStatementId ?? ''),
+            originalPaid: raw.originalPaid == null ? paid - money(raw.debtPaid) : money(raw.originalPaid),
+            originalDebt: raw.originalDebt == null ? (raw.debt == null || raw.debt === '' ? total - paid : money(raw.debt)) + money(raw.debtPaid) : money(raw.originalDebt),
+            debtPaid: money(raw.debtPaid),
             debt: raw.debt == null || raw.debt === '' ? total - paid : money(raw.debt)
         };
     }

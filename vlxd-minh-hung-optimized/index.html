@@ -57,6 +57,7 @@
             <form id="filterForm" class="filter-form">
                 <div class="form-group"><label for="fromDate">Từ ngày</label><input type="date" id="fromDate" name="fromDate"></div>
                 <div class="form-group"><label for="toDate">Đến ngày</label><input type="date" id="toDate" name="toDate"></div>
+                <div class="form-group order-search"><label for="orderSearch">Tìm hóa đơn</label><input type="search" id="orderSearch" placeholder="Mã đơn, khách hàng, tên hàng…"></div>
                 <div class="filter-actions"><button type="submit" class="primary">Tìm kiếm</button><button type="button" id="resetFilters" class="secondary">Xem tất cả</button></div>
                 <p id="filterError" class="form-error" role="alert" hidden></p>
             </form>
@@ -79,6 +80,7 @@
             </div>
             <section class="invoice-section" aria-labelledby="catalogTitle">
                 <div class="section-heading"><div><h2 id="catalogTitle">Danh sách mặt hàng</h2><p id="productCount" class="muted">Đang tải danh mục…</p></div><button type="button" id="productRefresh" class="secondary">Làm mới</button></div>
+                <div class="page-search"><label for="productSearch" class="sr-only">Tìm mặt hàng</label><input type="search" id="productSearch" placeholder="Tìm mã, tên, loại hàng, đơn vị tính…"></div>
                 <p id="productStatus" class="list-status" role="status" hidden></p>
                 <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Danh mục mặt hàng, có thể cuộn ngang">
                     <table class="order-table product-table">
@@ -95,6 +97,7 @@
                 <div><p class="eyebrow">QUẢN LÝ NHẬP HÀNG</p><h1 id="warehouseTitle">Kho hàng</h1><p class="muted">Theo dõi hóa đơn nhập và số lượng hàng còn trong kho.</p></div>
                 <div class="heading-actions"><button type="button" id="warehouseRefresh" class="secondary">Làm mới</button><button type="button" class="primary" data-open-receipt><span aria-hidden="true">＋</span> Nhập kho</button></div>
             </div>
+            <div class="page-search warehouse-search"><label for="warehouseSearch" class="sr-only">Tìm trong kho</label><input type="search" id="warehouseSearch" placeholder="Tìm mã hàng, tên hàng, phiếu nhập, nhà cung cấp…"></div>
             <p id="inventoryStatus" class="list-status page-status" role="status" hidden></p>
             <div class="warehouse-grid">
                 <section class="invoice-section receipts-section" aria-labelledby="receiptsTitle">
@@ -134,22 +137,30 @@
             <section class="invoice-section" aria-labelledby="customerListTitle"><div class="section-heading"><h2 id="customerListTitle">Danh sách khách hàng</h2><div class="customer-search form-group"><label for="customerSearch" class="sr-only">Tìm khách hàng</label><input id="customerSearch" type="search" placeholder="Tìm tên, mã, số điện thoại, địa chỉ…"></div></div>
                 <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Danh sách khách hàng"><table class="order-table customer-table"><thead><tr><th>Mã khách</th><th>Khách hàng</th><th>Điện thoại / Địa chỉ</th><th>Số đơn</th><th class="money">Còn nợ</th><th></th></tr></thead><tbody id="customerList"><tr class="empty-row"><td colspan="6">Mở mục Khách hàng để tải dữ liệu.</td></tr></tbody></table></div>
             </section>
-            <section id="customerDetail" class="customer-detail" aria-labelledby="customerDetailTitle" hidden>
-                <div class="page-heading"><div><p id="customerDetailCode" class="eyebrow"></p><h2 id="customerDetailTitle"></h2><p id="customerDetailContact" class="muted"></p></div><button type="button" id="customerExportDebt" class="primary">Lập / In công nợ tổng</button></div>
-                <p class="receipt-note">Đơn mới còn nợ được gộp vào phiếu tổng đang mở. Khi thu đủ, phiếu được tất toán; đơn phát sinh sau thuộc đợt tiếp theo. Khách có thể trả nhiều lần.</p>
-                <section class="invoice-section"><div class="section-heading"><h3>Các phiếu công nợ tổng</h3><p id="customerStatementCount" class="muted"></p></div><div class="order-table-wrapper" tabindex="0" role="region" aria-label="Phiếu công nợ tổng của khách"><table class="order-table statement-table"><thead><tr><th>Mã phiếu</th><th>Ngày mở</th><th>Số đơn</th><th class="money">Nợ gộp</th><th class="money">Đã thu</th><th class="money">Còn nợ</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="customerStatements"></tbody></table></div></section>
-                <section class="invoice-section"><div class="section-heading"><h3>Đơn hàng của khách</h3><p id="customerOrderCount" class="muted"></p></div><div class="order-table-wrapper" tabindex="0" role="region" aria-label="Các đơn hàng của khách"><table class="order-table customer-orders-table"><thead><tr><th>Mã hóa đơn</th><th>Ngày</th><th class="money">Tổng tiền</th><th class="money">Đã trả</th><th class="money">Còn nợ</th><th>Phiếu tổng</th></tr></thead><tbody id="customerOrders"></tbody></table></div></section>
-            </section>
+
         </section>
         <footer class="page-footer">VLXD Minh Hùng <span aria-hidden="true">·</span> Quản lý bán hàng và kho</footer>
     </main>
 </div>
 
+<dialog id="customerDetailPanel" class="order-panel customer-detail-panel" aria-labelledby="customerDetailTitle">
+    <button type="button" class="icon-button customer-detail-close" data-close-customer-detail aria-label="Đóng công nợ khách hàng">×</button>
+            <section id="customerDetail" class="customer-detail" aria-labelledby="customerDetailTitle" hidden>
+                <p id="customerDetailStatus" class="form-error" role="status" hidden></p>
+                <div class="page-heading"><div><p id="customerDetailCode" class="eyebrow"></p><h2 id="customerDetailTitle"></h2><p id="customerDetailContact" class="muted"></p></div><button type="button" id="customerExportDebt" class="primary">Lập / In công nợ tổng</button></div>
+                <p class="receipt-note">Đơn mới còn nợ được gộp vào phiếu tổng đang mở. Khi thu đủ, phiếu được tất toán; đơn phát sinh sau thuộc đợt tiếp theo. Khách có thể trả nhiều lần.</p>
+                <section class="invoice-section"><div class="section-heading"><h3>Các phiếu công nợ tổng</h3><p id="customerStatementCount" class="muted"></p></div><div class="order-table-wrapper" tabindex="0" role="region" aria-label="Phiếu công nợ tổng của khách"><table class="order-table statement-table"><thead><tr><th>Mã phiếu</th><th>Ngày mở</th><th>Số đơn</th><th class="money">Nợ gộp</th><th class="money">Đã thu</th><th class="money">Còn nợ</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="customerStatements"></tbody></table></div></section>
+                <section class="invoice-section"><div class="section-heading"><h3>Đơn hàng của khách</h3><p id="customerOrderCount" class="muted"></p></div><div class="order-table-wrapper" tabindex="0" role="region" aria-label="Các đơn hàng của khách"><table class="order-table customer-orders-table"><thead><tr><th>Mã hóa đơn</th><th>Ngày</th><th class="money">Tổng tiền</th><th class="money">Đã trả</th><th class="money">Còn nợ</th><th>Phiếu tổng</th></tr></thead><tbody id="customerOrders"></tbody></table></div></section>
+            </section>
+    <div class="btn-group"><button type="button" class="secondary" data-close-customer-detail>Đóng</button></div>
+</dialog>
+
 <dialog id="orderPanel" class="order-panel" aria-labelledby="orderTitle">
     <form id="createForm" novalidate>
-        <div class="panel-heading"><div><p class="eyebrow">HÓA ĐƠN BÁN HÀNG</p><h2 id="orderTitle">Tạo hóa đơn mới</h2><p class="order-id">Mã dự kiến: <strong id="orderId">…</strong></p></div><button type="button" class="icon-button" data-close-order aria-label="Đóng tạo hóa đơn">×</button></div>
+        <div class="panel-heading"><div><p class="eyebrow">HÓA ĐƠN BÁN HÀNG</p><h2 id="orderTitle">Tạo hóa đơn mới</h2><p class="order-id"><span id="orderIdLabel">Mã dự kiến:</span> <strong id="orderId">…</strong></p></div><button type="button" class="icon-button" data-close-order aria-label="Đóng hóa đơn">×</button></div>
         <div class="panel-content">
             <p id="orderFormError" class="form-error" role="alert" hidden></p>
+            <p id="orderDebtPaidInfo" class="receipt-note" hidden></p>
             <div class="customer-grid">
                 <div class="form-group"><label for="customer">Tên khách hàng <span class="required" aria-hidden="true">*</span></label><input type="text" id="customer" name="customer" list="customerOptions" autocomplete="off" placeholder="Chọn khách cũ hoặc nhập tên mới" required><datalist id="customerOptions"></datalist></div>
                 <div class="form-group"><label for="customerPhone">Số điện thoại</label><input type="tel" id="customerPhone" name="customerPhone" autocomplete="tel" placeholder="Giúp phân biệt các khách trùng tên"></div>
@@ -173,7 +184,7 @@
                 </div>
             </div>
         </div>
-        <div class="btn-group"><button type="button" class="secondary" data-close-order>Đóng</button><div class="save-actions"><button type="submit" id="saveOrder" name="action" value="save" class="primary">Lưu hóa đơn</button><button type="submit" id="saveAndPrint" name="action" value="print" class="success">Lưu và in</button></div></div>
+        <div class="btn-group"><button type="button" class="secondary" data-close-order>Đóng</button><div class="save-actions"><button type="button" id="reprintOrder" class="secondary" hidden>In lại</button><button type="button" id="editOrder" class="primary" hidden>Chỉnh sửa</button><button type="button" id="cancelOrderEdit" class="secondary" hidden>Hủy chỉnh sửa</button><button type="submit" id="saveOrder" name="action" value="save" class="primary">Lưu hóa đơn</button><button type="submit" id="saveAndPrint" name="action" value="print" class="success">Lưu và in</button></div></div>
     </form>
 </dialog>
 
@@ -259,8 +270,8 @@
     <div class="invoice-header"><h2>VLXD MINH HÙNG</h2><p>SĐT: 0919262432</p></div><h1 class="invoice-title">PHIẾU CÔNG NỢ TỔNG</h1>
     <div class="invoice-info"><span>Số phiếu: <strong id="d_id"></strong></span><span id="d_date"></span></div><p id="d_through"></p>
     <p><strong>Khách hàng:</strong> <span id="d_customer"></span> · <span id="d_customerId"></span></p><p><strong>Điện thoại:</strong> <span id="d_phone"></span></p><p><strong>Địa chỉ:</strong> <span id="d_address"></span></p>
-    <table><thead><tr><th>STT</th><th>Hóa đơn</th><th>Ngày</th><th>Giá trị đơn</th><th>Đã trả trước gộp</th><th>Nợ đưa vào phiếu</th></tr></thead><tbody id="d_table"></tbody></table>
-    <table class="print-totals"><tbody><tr><th>NỢ GỘP</th><td id="d_total"></td></tr><tr><th>ĐÃ THU THEO PHIẾU</th><td id="d_paid"></td></tr><tr><th>CÒN NỢ</th><td id="d_debt"></td></tr></tbody></table>
+    <table><thead><tr><th>Ngày</th><th>Tên hàng</th><th>Số lượng</th><th>ĐVT</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody id="d_table"></tbody></table>
+    <table class="print-totals"><tbody><tr><th>TỔNG TIỀN</th><td id="d_total"></td></tr><tr><th>ĐÃ TRẢ</th><td id="d_paid"></td></tr><tr><th>NỢ LẠI</th><td id="d_debt"></td></tr></tbody></table>
     <p><strong>Trạng thái:</strong> <span id="d_status"></span></p><h3>Lịch sử thu tiền</h3><table><thead><tr><th>Mã thu</th><th>Ngày</th><th>Số tiền</th><th>Ghi chú</th></tr></thead><tbody id="d_payments"></tbody></table>
     <div class="debt-signatures"><div><strong>KHÁCH HÀNG</strong><p>Ký, ghi rõ họ tên</p></div><div><strong>NGƯỜI LẬP PHIẾU</strong><p>Ký, ghi rõ họ tên</p></div></div>
 </section>

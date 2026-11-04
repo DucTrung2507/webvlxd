@@ -11,6 +11,8 @@
     let customerDefaults;
     let returnFocus;
     let toastTimer;
+    let mode = 'create';
+    let selectedOrder;
 
     function notify(message, type = '') {
         const toast = get('toast');
@@ -53,13 +55,14 @@
         const row = document.createElement('div');
         row.className = 'item';
         row.innerHTML = `<div class="stt"></div>
-            <input class="name" type="text" list="productOptions" placeholder="Chọn mặt hàng đã tạo" aria-label="Tên hàng" autocomplete="off">
+            <div class="item-product"><input class="name" type="text" list="productOptions" placeholder="Chọn mặt hàng đã tạo" aria-label="Tên hàng" autocomplete="off"><small class="item-stock" aria-live="polite" hidden></small></div>
             <input class="qty" type="number" value="1" min="0" step="1" aria-label="Số lượng">
             <select class="unit" aria-label="Đơn vị tính" required><option value="">Chọn ĐVT</option></select>
             <input class="price" type="text" inputmode="numeric" placeholder="0" aria-label="Đơn giá">
             <div class="subtotal">0 đ</div>
             <button type="button" data-delete-item aria-label="Xóa mặt hàng">×</button>`;
         get('items').appendChild(row);
+        return row;
     }
 
     function syncItemRows() {
@@ -93,6 +96,19 @@
         return product && Array.isArray(product.units) ? product.units : [];
     }
 
+    function stockHint(row) {
+        const hint = row.querySelector('.item-stock');
+        const name = row.querySelector('.name').value.trim();
+        const product = app.Inventory && app.Inventory.resolveProduct(name);
+        const id = product ? product.id : row.getAttribute('data-product-id');
+        const availability = id && app.Inventory && app.Inventory.getAvailability
+            ? app.Inventory.getAvailability(id, row.querySelector('.unit').value, selectedOrder && selectedOrder.id) : null;
+        hint.hidden = !name;
+        hint.textContent = !name ? '' : availability && availability.known
+            ? 'Số lượng hiện có: ' + Number(availability.qty).toLocaleString('vi-VN', {maximumFractionDigits: 6}) + (availability.unit ? ' ' + availability.unit : '')
+            : 'Chưa có thông tin tồn kho';
+    }
+
     function selectProduct(row, product) {
         const previous = row.getAttribute('data-product-id');
         if (product && previous === product.id) return;
@@ -103,10 +119,11 @@
         unit.value = units.length ? units[0].unit : '';
         row.querySelector('.price').value = units.length ? money(units[0].price).toLocaleString('vi-VN') : '';
         row.setAttribute('data-product-id', product ? product.id : '');
+        stockHint(row);
     }
 
     function updateItem(event) {
-        if (saving) return;
+        if (saving || mode === 'view') return;
         event.target.removeAttribute('aria-invalid');
         get('paid').value = '';
         if (event.target.matches('.price')) formatInput(event.target);
@@ -120,6 +137,7 @@
             const variant = productUnits(product).find(item => item.unit === event.target.value);
             row.querySelector('.price').value = variant ? money(variant.price).toLocaleString('vi-VN') : '';
         }
+        stockHint(event.target.closest('.item'));
         totals();
     }
 
@@ -133,22 +151,42 @@
             total += subtotal;
         });
         get('total').textContent = formatMoney(total);
-        get('debt').textContent = formatMoney(total - money(get('paid').value));
+        const collected = mode === 'edit' && selectedOrder ? money(selectedOrder.debtPaid) : 0;
+        get('debt').textContent = formatMoney(total - money(get('paid').value) - collected);
         return total;
     }
 
     function setBusy(value) {
         saving = value;
         get('createForm').setAttribute('aria-busy', String(value));
-        get('createForm').querySelectorAll('input, select, button').forEach(control => { control.disabled = value; });
-        get('saveOrder').disabled = value || !ready;
-        get('saveAndPrint').disabled = value || !ready;
-        get('saveOrder').textContent = value ? 'Đang lưu…' : 'Lưu hóa đơn';
+        const view = mode === 'view';
+        get('createForm').querySelectorAll('input, select, button').forEach(control => { control.disabled = value || view; });
+        document.querySelectorAll('[data-close-order]').forEach(control => { control.disabled = value; });
+        ['saveOrder', 'saveAndPrint', 'addItem', 'payFull'].forEach(id => { get(id).hidden = view; });
+        get('saveOrder').disabled = value || !ready || view;
+        get('saveAndPrint').disabled = value || !ready || view;
+        get('saveOrder').textContent = value ? 'Đang lưu…' : mode === 'edit' ? 'Lưu thay đổi' : 'Lưu hóa đơn';
+        get('saveAndPrint').textContent = mode === 'edit' ? 'Lưu và in lại' : 'Lưu và in';
+        get('editOrder').hidden = mode !== 'view';
+        get('editOrder').disabled = value || !ready || !selectedOrder || !selectedOrder.canEdit;
+        get('reprintOrder').hidden = mode === 'create';
+        get('reprintOrder').disabled = value;
+        get('cancelOrderEdit').hidden = mode !== 'edit';
+        get('cancelOrderEdit').disabled = value;
+        get('orderTitle').textContent = mode === 'create' ? 'Tạo hóa đơn mới' : mode === 'edit' ? 'Chỉnh sửa hóa đơn' : 'Chi tiết hóa đơn';
+        get('orderIdLabel').textContent = mode === 'create' ? 'Mã dự kiến:' : 'Mã hóa đơn:';
+        if (mode === 'edit' && selectedOrder && selectedOrder.debtStatementId) {
+            ['customer', 'customerPhone', 'customerIsNew'].forEach(id => { get(id).disabled = true; });
+        }
+        get('orderDebtPaidInfo').hidden = !selectedOrder || !selectedOrder.debtPaid;
+        get('orderDebtPaidInfo').textContent = selectedOrder && selectedOrder.debtPaid ? 'Đã thu qua phiếu công nợ: ' + formatMoney(selectedOrder.debtPaid) : '';
     }
 
     async function open() {
         if (get('orderPanel').open) return;
         const request = ++opening;
+        mode = 'create';
+        selectedOrder = null;
         returnFocus = document.activeElement;
         ready = false;
         saveRequestId = app.Data.requestId();
@@ -184,6 +222,100 @@
             get('orderFormError').textContent = error.message;
             get('orderFormError').hidden = false;
         }
+    }
+
+    function fillExisting(order, editing = false) {
+        get('createForm').reset();
+        get('customerIsNew').checked = false;
+        get('customer').value = order.customer;
+        get('customerPhone').value = order.phone;
+        get('address').value = order.address;
+        get('shipper').value = order.shipper;
+        get('paid').value = Number(editing ? order.originalPaid : order.paid).toLocaleString('vi-VN', {maximumFractionDigits: 2});
+        selectedCustomer = order.customerId ? {id: order.customerId, name: order.customer, phone: order.phone, address: order.address} : null;
+        customerDefaults = selectedCustomer ? {phone: order.phone, address: order.address} : null;
+        get('orderId').textContent = order.id;
+        get('items').replaceChildren();
+        order.items.forEach(item => {
+            const row = addItem();
+            const product = app.Inventory && app.Inventory.resolveProduct(item.productId || item.name);
+            if (product) selectProduct(row, product);
+            row.querySelector('.name').value = editing && product ? product.name : item.name;
+            row.querySelector('.qty').value = String(item.qty);
+            const unit = row.querySelector('.unit');
+            if (!product || !productUnits(product).some(entry => entry.unit === item.unit)) {
+                unit.innerHTML += `<option value="${app.Data.escapeHtml(item.unit)}">${app.Data.escapeHtml(item.unit || 'Chưa có ĐVT')}</option>`;
+            }
+            unit.value = item.unit;
+            row.querySelector('.price').value = Number(item.price).toLocaleString('vi-VN', {maximumFractionDigits: 2});
+            row.querySelector('.subtotal').textContent = formatMoney(item.subtotal);
+            row.setAttribute('data-product-id', item.productId || product && product.id || '');
+            stockHint(row);
+        });
+        if (editing) syncItemRows();
+        else { if (!rows().length) addItem(); renumber(); }
+        get('orderFormError').hidden = true;
+        if (!editing && !order.canEdit) {
+            get('orderFormError').textContent = order.editBlockedReason || 'Hóa đơn này không thể chỉnh sửa.';
+            get('orderFormError').hidden = false;
+        }
+        if (editing) totals();
+        else {
+            get('total').textContent = formatMoney(order.total);
+            get('debt').textContent = formatMoney(order.debt);
+        }
+        setBusy(false);
+    }
+
+    async function openExisting(value) {
+        if (get('orderPanel').open || saving) return;
+        const raw = value && typeof value === 'object' ? value : app.List.getOrders().find(order => order.id === value);
+        if (!raw) { notify('Không tìm thấy hóa đơn. Bấm Làm mới và thử lại.', 'error'); return; }
+        const request = ++opening;
+        mode = 'view';
+        selectedOrder = app.Data.normalizeOrder(raw);
+        orderDate = selectedOrder.date || todayKey();
+        returnFocus = document.activeElement;
+        ready = false;
+        fillExisting(selectedOrder);
+        get('orderPanel').showModal();
+        try {
+            if (app.Inventory) await app.Inventory.ensureLoaded();
+            if (app.Customers) await app.Customers.ensureLoaded();
+            if (request !== opening || !get('orderPanel').open) return;
+            ready = true;
+            rows().forEach(stockHint);
+            if (!selectedOrder.canEdit) {
+                get('orderFormError').textContent = selectedOrder.editBlockedReason || 'Hóa đơn này không thể chỉnh sửa.';
+                get('orderFormError').hidden = false;
+            }
+            setBusy(false);
+        } catch (error) {
+            if (request !== opening || !get('orderPanel').open) return;
+            get('orderFormError').textContent = 'Vẫn có thể in lại hóa đơn. Chưa chỉnh sửa được: ' + error.message;
+            get('orderFormError').hidden = false;
+            setBusy(false);
+        }
+    }
+
+    function beginEdit() {
+        if (saving || mode !== 'view' || !ready || !selectedOrder || !selectedOrder.canEdit) return;
+        mode = 'edit';
+        saveRequestId = app.Data.requestId();
+        fillExisting(selectedOrder, true);
+        rows()[0].querySelector('.name').focus();
+    }
+
+    function cancelEdit() {
+        if (saving || mode !== 'edit' || !selectedOrder) return;
+        mode = 'view';
+        fillExisting(selectedOrder);
+    }
+
+    function reprint() {
+        if (saving || !selectedOrder) return;
+        try { app.Print.print(selectedOrder); }
+        catch { notify('Chưa mở được cửa sổ in. Vui lòng thử lại.', 'error'); }
     }
 
     function close() {
@@ -229,10 +361,11 @@
         const total = totals();
         return {
             id: get('orderId').textContent, date: formatDate(orderDate), requestId: saveRequestId,
+            ...(mode === 'edit' && selectedOrder ? {baseVersion: selectedOrder.version} : {}),
             customer: selectedCustomer ? selectedCustomer.name : get('customer').value.trim(),
             customerId: selectedCustomer ? selectedCustomer.id : '', phone: get('customerPhone').value.trim(), address: get('address').value.trim(),
             shipper: get('shipper').value.trim(), total: formatMoney(total), paid: get('paid').value || '0',
-            debt: formatMoney(total - money(get('paid').value)),
+            debt: formatMoney(total - money(get('paid').value) - (mode === 'edit' && selectedOrder ? money(selectedOrder.debtPaid) : 0)),
             items: filled.map(row => {
                 const name = row.querySelector('.name').value.trim();
                 const product = app.Inventory && app.Inventory.resolveProduct(name);
@@ -245,21 +378,26 @@
 
     async function submit(event) {
         event.preventDefault();
-        if (saving || !ready) return;
+        if (saving || !ready || mode === 'view') return;
         const order = collect();
         if (!order) return;
         const print = event.submitter && event.submitter.value === 'print';
         setBusy(true);
         let saved;
-        try { saved = await app.API.save(order); } catch (error) {
+        const editing = mode === 'edit';
+        try { saved = await (editing ? app.API.updateOrder(order) : app.API.save(order)); } catch (error) {
             setBusy(false);
             get('orderFormError').textContent = error.message || 'Chưa lưu được hóa đơn. Kiểm tra kết nối và thử lại.';
             get('orderFormError').hidden = false;
             return;
         }
         setBusy(false);
-        close();
-        notify('Đã lưu hóa đơn thành công.', 'success');
+        if (editing) {
+            selectedOrder = app.Data.normalizeOrder(saved);
+            mode = 'view';
+            fillExisting(selectedOrder);
+        } else close();
+        notify(editing ? 'Đã cập nhật hóa đơn thành công.' : 'Đã lưu hóa đơn thành công.', 'success');
         app.List.remember(saved);
         app.List.load();
         if (app.Inventory) app.Inventory.load(true);
@@ -273,6 +411,9 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('[data-open-order]').forEach(button => button.addEventListener('click', open));
+        get('editOrder').addEventListener('click', beginEdit);
+        get('cancelOrderEdit').addEventListener('click', cancelEdit);
+        get('reprintOrder').addEventListener('click', reprint);
         document.querySelectorAll('[data-close-order]').forEach(button => button.addEventListener('click', close));
         get('orderPanel').addEventListener('cancel', event => { event.preventDefault(); close(); });
         get('orderPanel').addEventListener('click', event => {
@@ -281,7 +422,7 @@
             if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close();
         });
         get('addItem').addEventListener('click', () => {
-            if (saving) return;
+            if (saving || mode === 'view') return;
             syncItemRows();
             totals();
             rows().at(-1).querySelector('.name').focus();
@@ -289,7 +430,7 @@
         get('items').addEventListener('input', updateItem);
         get('items').addEventListener('change', updateItem);
         get('items').addEventListener('keydown', event => {
-            if (saving || !event.target.matches('.qty') || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            if (saving || mode === 'view' || !event.target.matches('.qty') || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
             event.preventDefault();
             const current = Number(event.target.value) || 0;
             event.target.value = String(Math.max(0, event.key === 'ArrowUp' ? Math.floor(current) + 1 : Math.ceil(current) - 1));
@@ -297,7 +438,7 @@
         });
         get('items').addEventListener('click', event => {
             const button = event.target.closest('[data-delete-item]');
-            if (!button || saving) return;
+            if (!button || saving || mode === 'view') return;
             const row = button.closest('.item');
             const index = rows().indexOf(row);
             row.remove();
@@ -308,7 +449,11 @@
             remaining[Math.min(index, remaining.length - 1)].querySelector('.name').focus();
         });
         get('paid').addEventListener('input', () => { formatInput(get('paid')); totals(); });
-        get('payFull').addEventListener('click', () => { get('paid').value = totals().toLocaleString('vi-VN'); totals(); });
+        get('payFull').addEventListener('click', () => {
+            const collected = mode === 'edit' && selectedOrder ? money(selectedOrder.debtPaid) : 0;
+            get('paid').value = Math.max(0, totals() - collected).toLocaleString('vi-VN', {maximumFractionDigits: 2});
+            totals();
+        });
         get('customer').addEventListener('input', () => {
             get('customer').removeAttribute('aria-invalid');
             if (!saving) selectCustomer();
@@ -318,4 +463,5 @@
         get('createForm').addEventListener('submit', submit);
         app.List.init();
     });
+    app.Order = {openExisting};
 }(window.InvoiceApp));

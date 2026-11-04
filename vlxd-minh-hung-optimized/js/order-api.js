@@ -121,7 +121,16 @@
         return result;
     }
 
-    app.API = {list, save, nextId, inventory, createProduct, receiveStock, customers,
+    async function updateOrder(order) {
+        const result = await request('', {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+            body: JSON.stringify({...order, action: 'updateOrder'})});
+        if (!result.order || !result.order.id || !Array.isArray(result.order.items) || !Number.isInteger(result.order.version)) {
+            throw new Error('Chưa xác nhận được thay đổi hóa đơn. Hãy làm mới để kiểm tra trước khi thử lại.');
+        }
+        return result.order;
+    }
+
+    app.API = {list, save, nextId, inventory, createProduct, receiveStock, customers, updateOrder,
         createDebtStatement: payload => debtAction('createDebtStatement', payload),
         payDebtStatement: payload => debtAction('payDebtStatement', payload)};
 }(window.InvoiceApp));
