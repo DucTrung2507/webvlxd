@@ -42,6 +42,29 @@ h3{font-size:15px}
 .warehouse-grid{display:grid;grid-template-columns:minmax(0,2.5fr) minmax(290px,1fr);align-items:start;gap:20px}
 .warehouse-grid>.invoice-section{min-width:0}
 .warehouse-sidebar{display:flex;flex-direction:column;gap:20px;min-width:0}
+.warehouse-content{min-width:0}
+.warehouse-tabs{display:flex;gap:6px;padding:5px;margin-bottom:20px;width:fit-content;max-width:100%;border:1px solid var(--line);border-radius:10px;background:#eaf0f8}
+.warehouse-tabs button{padding:10px 18px;background:transparent;color:#475569}
+.warehouse-tabs button[aria-selected="true"]{background:#fff;color:var(--blue);box-shadow:0 1px 4px #14283f12}
+.stock-controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:14px;padding:0 24px 20px}
+.stock-controls .stock-search{flex:1 1 220px}
+.stock-controls select{min-width:175px}
+.stock-group-toggle{display:flex;align-items:center;gap:8px;min-height:42px;font-size:12px;color:#475569;cursor:pointer}
+.stock-group-toggle input{width:auto;accent-color:var(--blue)}
+.product-actions{flex-wrap:wrap;justify-content:flex-end}
+.order-panel.product-import-panel{width:min(560px,calc(100vw - 32px))}
+.order-panel.product-import-panel.has-preview{width:min(1000px,calc(100vw - 32px))}
+.product-template-link{padding:0;border:0;border-radius:0;background:transparent;color:var(--blue);text-decoration:underline;font-weight:500}
+.product-template-link:hover:enabled{color:#1d4ed8}
+.product-import-file{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.order-table.product-import-table{min-width:800px}
+.product-import-errors{margin:0;padding:12px 16px 12px 34px;border:1px solid #fecaca;border-radius:8px;background:#fef2f2;color:var(--red);max-height:180px;overflow:auto;font-size:12px}
+.product-import-errors li+li{margin-top:5px}
+.product-import-table .import-status{min-width:140px;white-space:normal;overflow-wrap:anywhere}
+.stock-table .stock-group th{padding:13px 16px;background:#eaf2ff;color:#1e40af;text-align:left;font-size:13px;white-space:normal}
+.stock-table .grouped-stock-row td:nth-child(2){padding-left:30px}
+.warehouse-content .stock-section .section-heading{padding:23px 24px 20px}
+.warehouse-content .stock-section h2{font-size:18px}
 .pending-section .section-heading{padding:18px 18px 10px}
 .pending-section h2{font-size:16px}
 .pending-note{padding:0 18px 14px;color:#92400e;font-size:12px}
@@ -217,3 +240,5 @@ table{width:100%;border-collapse:collapse}
 }
 @media(max-width:700px){.main-nav{flex-wrap:wrap}.main-nav button{padding:8px 10px;font-size:12px}.customer-search{flex:1}.customer-detail>.page-heading{flex-wrap:wrap}.customer-detail>.page-heading>button{width:100%}}
 @media(max-width:700px){.customer-detail-panel .customer-detail{padding:18px 16px}.page-search{padding-left:16px;padding-right:16px}.page-search.warehouse-search{padding:0}.order-panel .save-actions{flex-wrap:wrap;justify-content:flex-end}}
+@media(max-width:700px){.warehouse-tabs{display:grid;grid-template-columns:1fr 1fr;width:100%}.warehouse-tabs button{padding:10px 8px;font-size:12px;white-space:normal}.stock-controls{padding:0 16px 18px;gap:12px}.stock-controls .stock-search{flex-basis:100%}.stock-controls>.form-group:not(.stock-search){flex:1}.stock-controls select{min-width:0}.warehouse-content .stock-section .section-heading{padding:18px 16px}}
+@media(max-width:700px){#productsView>.page-heading{flex-wrap:wrap}.product-actions{width:100%;justify-content:flex-start}.product-import-panel .btn-group{flex-wrap:wrap}.product-import-panel .save-actions{flex:1}.product-import-panel .panel-heading h2{font-size:19px}}

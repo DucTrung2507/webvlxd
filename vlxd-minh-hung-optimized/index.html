@@ -11,6 +11,9 @@
     <script defer src="js/order-api.js"></script>
     <script defer src="js/customers.js"></script>
     <script defer src="js/inventory.js"></script>
+    <script defer src="js/vendor/xlsx.full.min.js"></script>
+    <script defer src="js/product-excel-data.js"></script>
+    <script defer src="js/product-import.js"></script>
     <script defer src="js/order-list.js"></script>
     <script defer src="js/order.js"></script>
     <script defer src="js/printorder.js"></script>
@@ -76,7 +79,7 @@
         <section id="productsView" data-page="products" aria-labelledby="productsTitle" hidden>
             <div class="page-heading">
                 <div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h1 id="productsTitle">Mặt hàng</h1><p class="muted">Quản lý tên hàng, loại hàng và giá bán theo từng đơn vị tính.</p></div>
-                <button type="button" class="primary" data-open-product><span aria-hidden="true">＋</span> Thêm mặt hàng</button>
+                <div class="heading-actions product-actions"><button type="button" id="productExcelImport" class="secondary">Nhập Excel</button><button type="button" class="primary" data-open-product><span aria-hidden="true">＋</span> Thêm mặt hàng</button></div>
             </div>
             <section class="invoice-section" aria-labelledby="catalogTitle">
                 <div class="section-heading"><div><h2 id="catalogTitle">Danh sách mặt hàng</h2><p id="productCount" class="muted">Đang tải danh mục…</p></div><button type="button" id="productRefresh" class="secondary">Làm mới</button></div>
@@ -97,11 +100,16 @@
                 <div><p class="eyebrow">QUẢN LÝ NHẬP HÀNG</p><h1 id="warehouseTitle">Kho hàng</h1><p class="muted">Theo dõi hóa đơn nhập và số lượng hàng còn trong kho.</p></div>
                 <div class="heading-actions"><button type="button" id="warehouseRefresh" class="secondary">Làm mới</button><button type="button" class="primary" data-open-receipt><span aria-hidden="true">＋</span> Nhập kho</button></div>
             </div>
-            <div class="page-search warehouse-search"><label for="warehouseSearch" class="sr-only">Tìm trong kho</label><input type="search" id="warehouseSearch" placeholder="Tìm mã hàng, tên hàng, phiếu nhập, nhà cung cấp…"></div>
+            <div class="warehouse-tabs" role="tablist" aria-label="Các phần của kho hàng">
+                <button type="button" id="warehouseReceiptsTab" role="tab" data-warehouse-tab="receipts" aria-controls="warehouseReceiptsPanel" aria-selected="true" tabindex="0">Hóa đơn nhập hàng</button>
+                <button type="button" id="warehouseStockTab" role="tab" data-warehouse-tab="stock" aria-controls="warehouseStockPanel" aria-selected="false" tabindex="-1">Số lượng hàng trong kho</button>
+            </div>
             <p id="inventoryStatus" class="list-status page-status" role="status" hidden></p>
             <div class="warehouse-grid">
-                <section class="invoice-section receipts-section" aria-labelledby="receiptsTitle">
+                <div class="warehouse-content">
+                <section id="warehouseReceiptsPanel" class="invoice-section receipts-section" role="tabpanel" aria-labelledby="warehouseReceiptsTab">
                     <div class="section-heading"><div><h2 id="receiptsTitle">Hóa đơn nhập</h2><p id="receiptCount" class="muted">Đang tải hóa đơn nhập…</p></div><span class="sort-label">Mới nhất trước</span></div>
+                    <div class="page-search receipt-search"><label for="warehouseSearch" class="sr-only">Tìm hóa đơn nhập hàng</label><input type="search" id="warehouseSearch" placeholder="Tìm mã phiếu, nhà cung cấp, tên hàng…"></div>
                     <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Bảng hóa đơn nhập, có thể cuộn ngang">
                         <table class="order-table receipt-table">
                             <caption class="sr-only">Lịch sử hóa đơn nhập hàng và thanh toán nhà cung cấp</caption>
@@ -110,14 +118,13 @@
                         </table>
                     </div>
                 </section>
-                <div class="warehouse-sidebar">
-                <section class="invoice-section pending-section" aria-labelledby="pendingTitle">
-                    <div class="section-heading"><div><h2 id="pendingTitle">Chờ hoàn thiện mặt hàng</h2><p id="pendingCount" class="muted">Đang tải…</p></div></div>
-                    <p class="pending-note">Bổ sung loại hàng, đơn vị tính và giá bán để được tạo hóa đơn bán hàng.</p>
-                    <div id="pendingProducts" class="pending-products" role="list" aria-label="Mặt hàng cần bổ sung thông tin"></div>
-                </section>
-                <section class="invoice-section stock-section" aria-labelledby="stockTitle">
+                <section id="warehouseStockPanel" class="invoice-section stock-section" role="tabpanel" aria-labelledby="warehouseStockTab" hidden>
                     <div class="section-heading"><div><h2 id="stockTitle">Số lượng hàng trong kho</h2><p id="stockCount" class="muted">Đang tải tồn kho…</p></div></div>
+                    <div class="stock-controls">
+                        <div class="form-group stock-search"><label for="stockSearch">Tìm hàng trong kho</label><input type="search" id="stockSearch" placeholder="Mã hàng, tên hàng, loại hàng…"></div>
+                        <div class="form-group"><label for="stockSort">Sắp xếp</label><select id="stockSort"><option value="name-asc">Tên hàng A → Z</option><option value="name-desc">Tên hàng Z → A</option><option value="qty-asc">Số lượng tăng dần</option><option value="qty-desc">Số lượng giảm dần</option><option value="id-asc">Mã hàng</option></select></div>
+                        <label class="stock-group-toggle" for="stockGroupType"><input type="checkbox" id="stockGroupType"> Nhóm theo loại mặt hàng</label>
+                    </div>
                     <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Số lượng hàng trong kho, có thể cuộn ngang">
                         <table class="order-table stock-table">
                             <caption class="sr-only">Mã hàng, tên hàng và số lượng tồn kho</caption>
@@ -126,6 +133,13 @@
                         </table>
                     </div>
                     <p class="stock-note">Tồn kho được quy đổi về ĐVT gốc của mỗi mặt hàng. Hàng chờ hoàn thiện vẫn hiển thị theo ĐVT đã nhập và chưa được bán.</p>
+                </section>
+                </div>
+                <div class="warehouse-sidebar">
+                <section class="invoice-section pending-section" aria-labelledby="pendingTitle">
+                    <div class="section-heading"><div><h2 id="pendingTitle">Chờ hoàn thiện mặt hàng</h2><p id="pendingCount" class="muted">Đang tải…</p></div></div>
+                    <p class="pending-note">Bổ sung loại hàng, đơn vị tính và giá bán để được tạo hóa đơn bán hàng.</p>
+                    <div id="pendingProducts" class="pending-products" role="list" aria-label="Mặt hàng cần bổ sung thông tin"></div>
                 </section>
                 </div>
             </div>
@@ -205,6 +219,21 @@
         </div>
         <div class="btn-group"><button type="button" class="secondary" data-close-product>Đóng</button><button type="submit" id="productSave" class="primary">Lưu mặt hàng</button></div>
     </form>
+</dialog>
+
+<dialog id="productImportPanel" class="order-panel product-import-panel" aria-labelledby="productImportTitle">
+    <div class="panel-heading"><div><p class="eyebrow">NHẬP DANH MỤC TỪ EXCEL</p><h2 id="productImportTitle">Thêm mặt hàng bằng Excel</h2><p class="order-id">Mỗi dòng là một ĐVT. Lặp lại tên hàng để thêm nhiều ĐVT cho cùng mặt hàng.</p></div><button type="button" class="icon-button" data-close-product-import aria-label="Đóng nhập Excel">×</button></div>
+    <div class="panel-content">
+        <p><button type="button" id="productTemplateDownload" class="product-template-link">mẫu excel nhập mặt hàng</button></p>
+        <div class="product-import-file"><button type="button" id="productImportChoose" class="secondary">Chọn file Excel</button><span class="muted">Định dạng .xlsx hoặc .xls · Tối đa 5 MB</span><input type="file" id="productExcelFile" accept=".xlsx,.xls" hidden aria-label="Chọn file Excel mặt hàng"></div>
+        <p class="receipt-note">Điền dữ liệu tại sheet Mat_hang trong file mẫu. Nhập đầy đủ tên, loại, ĐVT gốc, ĐVT, hệ số quy đổi và giá bán. Mặt hàng đã tồn tại sẽ được báo lỗi để bạn kiểm tra. Tối đa 5 MB, 1.000 dòng và 200 mặt hàng mỗi file.</p>
+        <p id="productImportSummary" class="muted" role="status"></p>
+        <p id="productImportError" class="form-error" role="alert" hidden></p>
+        <ul id="productImportErrors" class="product-import-errors" aria-label="Các dòng cần sửa trong file" hidden></ul>
+        <div class="order-table-wrapper" tabindex="0" role="region" aria-label="Xem trước mặt hàng sẽ nhập"><table class="order-table product-import-table"><thead><tr><th>Dòng Excel</th><th>Tên hàng</th><th>Loại</th><th>ĐVT gốc</th><th>ĐVT / Quy đổi / Giá bán</th><th>Trạng thái</th></tr></thead><tbody id="productImportList"></tbody></table></div>
+        <p id="productImportProgress" class="muted" role="status" aria-live="polite"></p>
+    </div>
+    <div class="btn-group"><button type="button" class="secondary" data-close-product-import>Đóng</button><div class="save-actions"><button type="button" id="productImportPause" class="secondary" hidden>Dừng sau mặt hàng này</button><button type="button" id="productImportConfirm" class="primary" disabled>Nhập mặt hàng</button></div></div>
 </dialog>
 
 <dialog id="receiptPanel" class="order-panel" aria-labelledby="receiptTitle">

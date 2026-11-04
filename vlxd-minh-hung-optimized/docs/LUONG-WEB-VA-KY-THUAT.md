@@ -87,15 +87,22 @@ Ví dụ ĐVT gốc là kg, khai báo kg giá 2.500, hệ số 1; bao giá 100.0
 
 Sau khi lưu, máy chủ trả mặt hàng chính thức, giao diện cập nhật theo mã, đóng biểu mẫu và tải lại Google. Tạo danh mục chưa làm phát sinh tồn. Nút Cập nhật cho phép sửa tên, loại, giá hoặc thêm ĐVT. Sau khi hàng hoàn thiện đã có nhập/xuất, máy chủ chặn đổi ĐVT gốc, ánh xạ ĐVT cũ, xóa ĐVT và đổi hệ số để bảo toàn lịch sử. Giá danh mục theo từng ĐVT là gợi ý; giá trên chứng từ vẫn sửa được.
 
-**8. Màn hình Kho.** Có nút Làm mới và Nhập kho, với khung hóa đơn lớn và hai khung nhỏ bên cạnh:
+
+Thêm bằng Excel: tại Mặt hàng, bấm **Nhập Excel** để mở cửa sổ nhập. Bấm dòng **mẫu excel nhập mặt hàng** trong cửa sổ để tải mẫu, điền tab `Mat_hang`, rồi bấm **Chọn file Excel** tại cùng cửa sổ để xem trước và xác nhận nhập. Mẫu có hai tab `Vi_du` và `Huong_dan` riêng; chúng không được import. Mỗi dòng khai báo một ĐVT, lặp tên/loại/ĐVT gốc khi cùng mặt hàng có nhiều ĐVT. Sáu cột gồm Tên hàng, Loại hàng, ĐVT gốc, ĐVT, Hệ số quy đổi và Giá bán; dòng ĐVT gốc cần hệ số 1.
+
+Web đọc file ngay trong trình duyệt bằng bản SheetJS lưu trong `js/vendor/`, kiểm tra và xem trước rồi mới tạo mặt hàng. Các ô thiếu, tên trùng với danh mục hoặc hàng chờ, ĐVT trùng, quy đổi/giá sai, công thức và ngày tháng được báo theo dòng. Cần sửa hết lỗi mới lưu; file chỉ thêm hàng mới, không ghi đè hàng cũ hoặc nhập số tồn. Giới hạn 5 MB, 1.000 dòng và 200 mặt hàng mỗi file. Nhập tiền/hệ số bằng ô số Excel; nếu dùng chữ, giá theo mẫu `100.000,50`, hệ số thập phân `0,125`.
+
+Mỗi mặt hàng được gửi qua API tạo mặt hàng hiện có với requestId riêng, giữ nguyên khi thử lại. Có thể dừng sau mặt hàng đang lưu rồi tiếp tục; các mặt hàng đã xác nhận không bị gửi lại. Nếu kết nối lỗi, phần đã lưu vẫn được giữ, giao diện báo rõ và cho thử lại phần còn lại. File Excel không được gửi sang dịch vụ xử lý bảng tính bên ngoài. Các mô-đun `js/product-excel-data.js` và `js/product-import.js` xử lý mẫu, dữ liệu và giao diện nhập.
+
+**8. Màn hình Kho.** Có nút Làm mới và Nhập kho, với hai mục chuyển đổi: Hóa đơn nhập hàng và Số lượng hàng trong kho. Mỗi lần chỉ hiện một mục ở vùng chính; khung Chờ hoàn thiện mặt hàng luôn ở bên cạnh, giữ kích thước như trước.
 
 | Khung | Nội dung |
 | --- | --- |
-| Hóa đơn nhập, khung lớn | Mã NK, ngày, nhà cung cấp, địa chỉ, mặt hàng, tổng tiền, đã trả, còn nợ |
+| Hóa đơn nhập hàng | Mã NK, ngày, nhà cung cấp, địa chỉ, mặt hàng, tổng tiền, đã trả, còn nợ; có ô tìm kiếm riêng |
 | Chờ hoàn thiện mặt hàng | Các tên hàng mới nhập/cũ thiếu thông tin, mã SP và nút Hoàn thiện |
-| Số lượng hàng trong kho | Mã sản phẩm, tên sản phẩm, ĐVT và số lượng còn lại |
+| Số lượng hàng trong kho | Mã sản phẩm, tên sản phẩm, ĐVT và số lượng còn lại; có tìm kiếm, sắp xếp và nhóm theo loại |
 
-Ô tìm kiếm Kho lọc đồng thời phiếu nhập theo mã/nhà cung cấp/địa chỉ/tên hàng, bảng tồn và danh sách chờ theo mã/tên/ĐVT; không thay đổi tồn thực. Mặt hàng có ô tìm mã/tên/loại/ĐVT. Cả hai bỏ dấu và không phân biệt hoa thường khi tìm.
+Ô tìm kiếm Hóa đơn nhập hàng lọc phiếu nhập theo mã/nhà cung cấp/địa chỉ/tên hàng. Ô tìm kiếm tồn kho lọc theo mã/tên/ĐVT/loại hàng, độc lập với phiếu nhập. Cả hai không lọc khung chờ hoàn thiện. Có thể sắp xếp tồn theo tên A–Z/Z–A, số lượng tăng/giảm hoặc mã hàng; tích Nhóm theo loại mặt hàng để hiện tiêu đề từng loại rồi các sản phẩm bên dưới. Hàng chưa có loại được xếp vào Chưa phân loại. Không cộng số lượng của các ĐVT khác nhau thành tổng nhóm. Mặt hàng có ô tìm mã/tên/loại/ĐVT. Các ô tìm kiếm bỏ dấu và không phân biệt hoa thường; chuyển mục và làm mới giữ lựa chọn đang dùng.
 
 Phiếu nhập xếp mới nhất trước; bấm mở chi tiết để xem hàng. Mã NK bấm được để in lại. Bảng tồn có cả hàng bằng 0; số đếm là số mã sản phẩm riêng biệt, không phải tổng số lượng hoặc số dòng ĐVT. Hàng hoàn thiện có một dòng tồn theo ĐVT gốc; hàng chờ có thể có nhiều dòng theo ĐVT nhập.
 

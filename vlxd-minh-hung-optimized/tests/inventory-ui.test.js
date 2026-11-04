@@ -7,6 +7,10 @@ load('tests/ui-dom-fixture.js');
 ['productStatus','inventoryStatus','productCount','receiptCount','stockCount','pendingCount','pendingProducts','productList','receiptList','stockList','productOptions','receiptProductOptions'].forEach(function (id) { add(id, 'div'); });
 ['warehouseRefresh','productRefresh'].forEach(function (id) { add(id, 'button'); });
 ['productSearch','warehouseSearch'].forEach(function (id) { add(id, 'input'); });
+add('stockSearch','input'); add('stockSort','select').value='name-asc'; add('stockGroupType','input').checked=false;
+add('warehouseReceiptsTab','button',body,{'data-warehouse-tab':'receipts'});
+add('warehouseStockTab','button',body,{'data-warehouse-tab':'stock'});
+add('warehouseReceiptsPanel','section'); add('warehouseStockPanel','section');
 ['product','receipt'].forEach(function (kind) {
     add(kind + 'Open', 'button', body, {['data-open-' + kind]:''});
     var panel = add(kind + 'Panel', 'dialog'), form = add(kind + 'Form', 'form', panel);
@@ -55,6 +59,24 @@ function expectRows(ids, message) {
 }
 async function run() {
     await emit(document,'DOMContentLoaded');
+    equal(nodes.warehouseReceiptsPanel.hidden,false,'Warehouse defaults to receipt section');
+    equal(nodes.warehouseStockPanel.hidden,true,'Stock section starts hidden');
+    equal(nodes.warehouseReceiptsTab.getAttribute('aria-selected'),'true','Active warehouse tab announced');
+    equal(nodes.warehouseStockTab.getAttribute('tabindex'),'-1','Inactive warehouse tab removed from tab sequence');
+    await emit(nodes.warehouseStockTab,'click');
+    equal(nodes.warehouseReceiptsPanel.hidden,true,'Selecting stock hides receipt section');
+    equal(nodes.warehouseStockPanel.hidden,false,'Selecting stock shows its own section');
+    nodes.warehouseReceiptsTab.focus();
+    await emit(nodes.warehouseReceiptsTab,'keydown',{key:'ArrowRight'});
+    equal(nodes.warehouseStockTab.getAttribute('aria-selected'),'true','Arrow navigation starts from focused tab even when another section is selected');
+    equal(document.activeElement,nodes.warehouseStockTab,'Arrow from inactive focused tab moves focus to target');
+    await emit(nodes.warehouseStockTab,'keydown',{key:'ArrowLeft'});
+    equal(nodes.warehouseReceiptsPanel.hidden,false,'Arrow key switches warehouse section');
+    equal(document.activeElement,nodes.warehouseReceiptsTab,'Arrow key moves focus with selection');
+    await emit(nodes.warehouseReceiptsTab,'keydown',{key:'End'});
+    equal(nodes.warehouseStockPanel.hidden,false,'End chooses last warehouse section');
+    await emit(nodes.warehouseStockTab,'keydown',{key:'Home'});
+    equal(nodes.warehouseReceiptsPanel.hidden,false,'Home chooses first warehouse section');
     inventoryResponses.push(new Error('Chức năng kho chưa được triển khai.'));
     await emit(nodes.productsNav,'click'); await settle();
     assert(!nodes.productStatus.hidden,'Initial old-deployment error shown');
@@ -187,6 +209,12 @@ async function run() {
     assert(!nodes.productList.innerHTML.includes('MH0004'),'Pending item excluded from completed catalog');
     assert(!nodes.productOptions.innerHTML.includes('MH0004'),'Pending item absent from sales suggestions');
     assert(nodes.receiptProductOptions.innerHTML.includes('MH0004'),'Pending item can be selected for further receipts');
+    nodes.warehouseSearch.value='receipt-not-found'; await emit(nodes.warehouseSearch,'input');
+    assert(nodes.pendingProducts.innerHTML.includes('MH0004'),'Receipt search never hides completion queue');
+    nodes.stockSearch.value='stock-not-found'; await emit(nodes.stockSearch,'input');
+    assert(nodes.pendingProducts.innerHTML.includes('MH0004'),'Stock search never hides completion queue');
+    nodes.warehouseSearch.value=''; await emit(nodes.warehouseSearch,'input');
+    nodes.stockSearch.value=''; await emit(nodes.stockSearch,'input');
     equal(app.Inventory.resolveProduct('MH0004'),undefined,'Pending item cannot resolve for sale');
     equal(app.Inventory.getProducts().length,3,'Sales catalog includes only completed products');
     await editProduct(waiting.id);
@@ -242,9 +270,12 @@ async function run() {
     nodes.productSearch.value=''; await emit(nodes.productSearch,'input');
     nodes.warehouseSearch.value=canonical.id; await emit(nodes.warehouseSearch,'input');
     assert(nodes.receiptList.innerHTML.includes(canonical.id),'Warehouse search finds receipt code');
-    assert(nodes.stockList.innerHTML.includes('Không có tồn kho phù hợp'),'Warehouse results do not show unrelated stock');
-    nodes.warehouseSearch.value='xi mang'; await emit(nodes.warehouseSearch,'input');
-    assert(nodes.stockList.innerHTML.includes('MH0001'),'Warehouse stock search ignores accents');
+    assert(nodes.stockList.innerHTML.includes('MH0001'),'Receipt search leaves stock independently visible');
+    nodes.stockSearch.value='xi mang'; await emit(nodes.stockSearch,'input');
+    assert(nodes.stockList.innerHTML.includes('MH0001'),'Stock search ignores accents');
+    assert(!nodes.stockList.innerHTML.includes('MH0002'),'Stock search hides unrelated stock');
+    assert(nodes.receiptList.innerHTML.includes(canonical.id),'Stock search preserves receipt search results');
+    nodes.stockSearch.value=''; await emit(nodes.stockSearch,'input');
     nodes.warehouseSearch.value=''; await emit(nodes.warehouseSearch,'input');
     equal(app.Inventory.getAvailability('MH0001','bao').qty,2,'Availability reports current base stock');
     equal(app.Inventory.getAvailability('MH0001','kg').qty,100,'Availability converts into chosen unit');
@@ -256,6 +287,60 @@ async function run() {
     await input(0,'.receipt-product','Sản phẩm hoàn toàn mới');
     assert(field(0,'.receipt-stock').textContent.includes('0 (hàng mới)'),'Unknown product has explicit zero-stock hint');
     await select(0,''); equal(field(0,'.receipt-stock').hidden,true,'Cleared name hides stock hint');
+    await emit(nodes.receiptClose,'click');
+
+    fixture.products.push(
+        {id:'TYPE-A',name:'Gạch 10',type:'Gạch',status:'active',baseUnit:'viên',units:[{unit:'viên',factor:1,price:100}]},
+        {id:'TYPE-B',name:'Gạch 2',type:'gạch',status:'active',baseUnit:'viên',units:[{unit:'viên',factor:1,price:100}]},
+        {id:'TYPE-C',name:'Tên <svg>',type:'<img onerror=x>',status:'active',baseUnit:'cái',units:[{unit:'cái',factor:1,price:100}]},
+        {id:'TYPE-D',name:'Chờ phân loại',type:'',status:'pending',units:[]}
+    );
+    fixture.stock.push(
+        {productId:'TYPE-A',name:'Gạch 10',unit:'viên',qty:10},
+        {productId:'TYPE-B',name:'Gạch 2',unit:'viên',qty:0.125},
+        {productId:'TYPE-C',name:'Tên <svg>',unit:'cái',qty:0},
+        {productId:'TYPE-D',name:'Chờ phân loại',unit:'kg',qty:0.5},
+        {productId:'TYPE-D',name:'Chờ phân loại',unit:'bao',qty:2}
+    );
+    await emit(nodes.warehouseStockTab,'click'); await app.Inventory.load(true);
+    equal(nodes.warehouseStockPanel.hidden,false,'Refresh preserves selected warehouse section');
+    nodes.stockSearch.value='gach'; await emit(nodes.stockSearch,'input');
+    assert(nodes.stockList.innerHTML.indexOf('Gạch 2')<nodes.stockList.innerHTML.indexOf('Gạch 10'),'Name sort uses natural Vietnamese numeric order');
+    nodes.stockSort.value='name-desc'; await emit(nodes.stockSort,'change');
+    assert(nodes.stockList.innerHTML.indexOf('Gạch 10')<nodes.stockList.innerHTML.indexOf('Gạch 2'),'Descending name sort reverses natural order');
+    nodes.stockSort.value='qty-asc'; await emit(nodes.stockSort,'change');
+    assert(nodes.stockList.innerHTML.indexOf('MH0003')<nodes.stockList.innerHTML.indexOf('TYPE-B'),'Quantity ascending includes zero before fractions');
+    assert(nodes.stockList.innerHTML.indexOf('TYPE-B')<nodes.stockList.innerHTML.indexOf('TYPE-A'),'Quantity ascending compares numeric fractions');
+    nodes.stockSort.value='qty-desc'; await emit(nodes.stockSort,'change');
+    assert(nodes.stockList.innerHTML.indexOf('TYPE-A')<nodes.stockList.innerHTML.indexOf('TYPE-B'),'Quantity descending supported');
+    nodes.stockSort.value='id-asc'; await emit(nodes.stockSort,'change');
+    assert(nodes.stockList.innerHTML.indexOf('TYPE-A')<nodes.stockList.innerHTML.indexOf('TYPE-B'),'Product code sorting supported');
+    nodes.stockSort.value='name-asc'; nodes.stockSearch.value=''; nodes.stockGroupType.checked=true; await emit(nodes.stockGroupType,'change');
+    assert(nodes.stockList.innerHTML.includes('class="stock-group"'),'Grouping creates category headings');
+    assert(/scope="colgroup">[Gg]ạch <span>\(3 mặt hàng\)<\/span>/.test(nodes.stockList.innerHTML),'Category join uses product database and normalizes letter case');
+    assert(nodes.stockList.innerHTML.includes('Chưa phân loại'),'Missing category has explicit group');
+    assert(nodes.stockList.innerHTML.includes('&lt;img onerror=x&gt;'),'Category headings escaped');
+    assert(!nodes.stockList.innerHTML.includes('<img onerror=x>'),'Category cannot inject HTML');
+    assert(nodes.stockList.innerHTML.includes('Tên &lt;svg&gt;'),'Grouped product names escaped');
+    equal((nodes.stockList.innerHTML.match(/class="grouped-stock-row"/g)||[]).length,fixture.stock.length,'Grouping retains every stock row without merging units');
+    assert(nodes.stockList.innerHTML.includes('Chưa phân loại <span>(1 mặt hàng)</span>'),'Two units of one pending product count as one product');
+    assert(nodes.stockList.innerHTML.includes('>0,125</td>'),'Fractional stock remains exact when grouped');
+    nodes.stockSearch.value='img onerror'; await emit(nodes.stockSearch,'input');
+    assert(nodes.stockList.innerHTML.includes('TYPE-C'),'Stock search includes category even though type is not a row column');
+    assert(nodes.stockCount.textContent.startsWith('1 / '),'Stock count reports filtered and full unique products');
+    assert(nodes.pendingProducts.innerHTML.includes('TYPE-D'),'Stock filtering leaves pending queue intact');
+    nodes.stockSearch.value='gach'; nodes.stockSort.value='qty-desc'; await emit(nodes.stockSort,'change');
+    await emit(nodes.productsNav,'click'); await settle(); await emit(nodes.warehouseNav,'click'); await settle();
+    equal(nodes.warehouseStockPanel.hidden,false,'Navigation preserves warehouse section');
+    equal(nodes.stockSearch.value,'gach','Navigation preserves stock search');
+    equal(nodes.stockSort.value,'qty-desc','Navigation preserves sorting');
+    equal(nodes.stockGroupType.checked,true,'Navigation preserves grouping checkbox');
+    nodes.stockGroupType.checked=false; await emit(nodes.stockGroupType,'change');
+    assert(!nodes.stockList.innerHTML.includes('class="stock-group"'),'Unticking grouping restores flat rows');
+    nodes.stockSearch.value=''; await emit(nodes.stockSearch,'input');
+    await emit(nodes.receiptOpen,'click'); await select(0,'MH0001'); await input(0,'.receipt-qty',7.5);
+    await emit(nodes.warehouseReceiptsTab,'click'); await emit(nodes.warehouseStockTab,'click');
+    equal(field(0,'.receipt-qty').value,'7.5','Section changes preserve receipt draft');
     await emit(nodes.receiptClose,'click');
     print('PASS: '+checks+' inventory UI checks (production listeners, fake DOM, no network)');
 }

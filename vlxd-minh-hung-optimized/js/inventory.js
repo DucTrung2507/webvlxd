@@ -10,6 +10,7 @@
     let loadVersion = 0;
     let pending;
     let lastError;
+    let warehouseTab = 'receipts';
     const forms = {
         product: {busy: false, ready: false, opening: 0},
         receipt: {busy: false, ready: false, opening: 0}
@@ -26,6 +27,59 @@
     const key = value => String(value || '').trim().replace(/\s+/g, ' ').normalize('NFC').toLocaleLowerCase('vi');
     const searchKey = value => key(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
     const matchesSearch = (values, query) => !query || searchKey(values.join(' ')).includes(searchKey(query));
+    const stockCollator = new Intl.Collator('vi', {numeric: true, sensitivity: 'base'});
+    function stockCompare(left, right) {
+        const sort = get('stockSort').value;
+        const name = stockCollator.compare(left.name || '', right.name || '');
+        const id = stockCollator.compare(left.productId || '', right.productId || '');
+        const unit = stockCollator.compare(left.unit || '', right.unit || '');
+        const amount = Number(left.qty || 0) - Number(right.qty || 0);
+        if (sort === 'qty-asc' || sort === 'qty-desc') return (sort === 'qty-desc' ? -amount : amount) || name || id || unit;
+        if (sort === 'id-asc') return id || name || unit;
+        return (sort === 'name-desc' ? -name : name) || id || unit;
+    }
+    function stockRow(item, grouped = false) {
+        return `<tr${grouped ? ' class="grouped-stock-row"' : ''}><td>${esc(item.productId)}</td><td>${esc(item.name)}</td><td>${esc(item.unit || 'Chưa có ĐVT')}</td><td class="money">${quantity(item.qty)}</td></tr>`;
+    }
+    function renderStock() {
+        const productsById = new Map(state.products.map(product => [product.id, product]));
+        const query = get('stockSearch').value;
+        const stock = state.stock.map(item => {
+            const product = productsById.get(item.productId);
+            return {...item, type: String(product && product.type || '').trim().replace(/\s+/g, ' ') || 'Chưa phân loại'};
+        }).filter(item => matchesSearch([item.productId, item.name, item.unit, item.type], query)).sort(stockCompare);
+        const visibleCount = new Set(stock.map(item => item.productId)).size;
+        const totalCount = new Set(state.stock.map(item => item.productId)).size;
+        get('stockCount').textContent = visibleCount + ' / ' + totalCount + ' mặt hàng';
+        if (!stock.length) {
+            get('stockList').innerHTML = '<tr class="empty-row"><td colspan="4">' + (query ? 'Không có tồn kho phù hợp.' : 'Nhập kho để ghi nhận hàng hóa và số lượng.') + '</td></tr>';
+            return;
+        }
+        if (!get('stockGroupType').checked) {
+            get('stockList').innerHTML = stock.map(item => stockRow(item)).join('');
+            return;
+        }
+        const groups = new Map();
+        stock.forEach(item => {
+            const groupKey = key(item.type);
+            if (!groups.has(groupKey)) groups.set(groupKey, {label: item.type, items: []});
+            groups.get(groupKey).items.push(item);
+        });
+        get('stockList').innerHTML = [...groups.entries()].sort(([left, a], [right, b]) => stockCollator.compare(a.label, b.label) || left.localeCompare(right))
+            .map(([, group]) => `<tr class="stock-group"><th colspan="4" scope="colgroup">${esc(group.label)} <span>(${new Set(group.items.map(item => item.productId)).size} mặt hàng)</span></th></tr>` + group.items.map(item => stockRow(item, true)).join('')).join('');
+    }
+    function setWarehouseTab(tab, focus = false) {
+        warehouseTab = tab === 'stock' ? 'stock' : 'receipts';
+        document.querySelectorAll('[data-warehouse-tab]').forEach(button => {
+            const active = button.getAttribute('data-warehouse-tab') === warehouseTab;
+            button.setAttribute('aria-selected', String(active));
+            button.setAttribute('tabindex', active ? '0' : '-1');
+            button.classList.toggle('active', active);
+            if (active && focus) button.focus();
+        });
+        get('warehouseReceiptsPanel').hidden = warehouseTab !== 'receipts';
+        get('warehouseStockPanel').hidden = warehouseTab !== 'stock';
+    }
     function complete(product) {
         return product.status !== 'pending' && !!product.type && !!product.baseUnit && Array.isArray(product.units) &&
             product.units.length > 0 && product.units.every(unit => unit.unit && Number(unit.price) > 0 && Number(unit.factor) > 0);
@@ -72,10 +126,8 @@
         const productQuery = get('productSearch').value;
         const warehouseQuery = get('warehouseSearch').value;
         const products = allProducts.filter(product => matchesSearch([product.id, product.name, product.type, ...(product.units || []).map(unit => unit.unit)], productQuery));
-        const incomplete = state.products.filter(product => !complete(product) && matchesSearch([product.id, product.name, product.type], warehouseQuery));
-        const stock = state.stock.filter(item => matchesSearch([item.productId, item.name, item.unit], warehouseQuery));
+        const incomplete = state.products.filter(product => !complete(product));
         get('productCount').textContent = (productQuery ? products.length + ' / ' + allProducts.length : products.length) + ' mặt hàng đã hoàn thiện';
-        get('stockCount').textContent = new Set(stock.map(item => item.productId)).size + ' mặt hàng' + (warehouseQuery ? ' phù hợp' : '');
         get('pendingCount').textContent = incomplete.length + ' mặt hàng cần bổ sung';
         get('productOptions').innerHTML = allProducts.map(product => `<option value="${esc(productLabel(product))}"></option>`).join('');
         get('receiptProductOptions').innerHTML = state.products.map(product => `<option value="${esc(productLabel(product))}"></option>`).join('');
@@ -84,10 +136,8 @@
             '<tr class="empty-row"><td colspan="5">' + (productQuery ? 'Không có mặt hàng phù hợp.' : 'Chưa có mặt hàng hoàn thiện. Thêm mặt hàng hoặc bổ sung thông tin tại Kho.') + '</td></tr>';
         get('pendingProducts').innerHTML = incomplete.length ? incomplete.map(product =>
             `<div class="pending-product" role="listitem"><div><strong>${esc(product.name)}</strong><small>${esc(product.id)} · Chưa được bán</small></div><button type="button" class="secondary" data-edit-product="${esc(product.id)}">Hoàn thiện</button></div>`).join('') :
-            '<p class="pending-empty">' + (warehouseQuery ? 'Không có mặt hàng chờ phù hợp.' : 'Không có mặt hàng chờ hoàn thiện.') + '</p>';
-        get('stockList').innerHTML = stock.length ? stock.map(item =>
-            `<tr><td>${esc(item.productId)}</td><td>${esc(item.name)}</td><td>${esc(item.unit || 'Chưa có ĐVT')}</td><td class="money">${quantity(item.qty)}</td></tr>`).join('') :
-            '<tr class="empty-row"><td colspan="4">' + (warehouseQuery ? 'Không có tồn kho phù hợp.' : 'Nhập kho để ghi nhận hàng hóa và số lượng.') + '</td></tr>';
+            '<p class="pending-empty">Không có mặt hàng chờ hoàn thiện.</p>';
+        renderStock();
         const receipts = D.sortOrders(state.receipts.map(receipt => ({...receipt, date: D.parseDate(receipt.date, receipt.id)}))).filter(receipt =>
             matchesSearch([receipt.id, receipt.supplier, receipt.address, D.formatDate(receipt.date), ...(receipt.items || []).flatMap(item => [item.name, item.productId, item.unit])], warehouseQuery));
         get('receiptCount').textContent = (warehouseQuery ? receipts.length + ' / ' + state.receipts.length : receipts.length) + ' hóa đơn nhập';
@@ -319,9 +369,7 @@
         setBusy('product', true);
         try {
             const saved = await app.API.createProduct(product);
-            ++loadVersion; pending = null;
-            state.products = [...state.products.filter(item => item.id !== saved.id), saved];
-            render();
+            rememberProduct(saved);
             setBusy('product', false);
             close('product');
             app.notify('Đã lưu mặt hàng ' + saved.id + '.', 'success');
@@ -416,6 +464,17 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.getAttribute('data-view'))));
+        document.querySelectorAll('[data-warehouse-tab]').forEach(button => {
+            button.addEventListener('click', () => setWarehouseTab(button.getAttribute('data-warehouse-tab')));
+            button.addEventListener('keydown', event => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const focusedTab = button.getAttribute('data-warehouse-tab');
+                const tab = event.key === 'Home' ? 'receipts' : event.key === 'End' ? 'stock' : focusedTab === 'receipts' ? 'stock' : 'receipts';
+                setWarehouseTab(tab, true);
+            });
+        });
+        setWarehouseTab(warehouseTab);
         ['product', 'receipt'].forEach(kind => {
             document.querySelectorAll('[data-open-' + kind + ']').forEach(button => button.addEventListener('click', () => open(kind)));
             document.querySelectorAll('[data-close-' + kind + ']').forEach(button => button.addEventListener('click', () => close(kind)));
@@ -426,6 +485,9 @@
         get('productRefresh').addEventListener('click', () => load(true));
         get('productSearch').addEventListener('input', render);
         get('warehouseSearch').addEventListener('input', render);
+        get('stockSearch').addEventListener('input', renderStock);
+        get('stockSort').addEventListener('change', renderStock);
+        get('stockGroupType').addEventListener('change', renderStock);
         get('productBaseUnit').addEventListener('input', () => {
             const input = get('productBaseUnit');
             const previous = input.getAttribute('data-previous-base');
@@ -508,5 +570,11 @@
         });
     });
 
-    app.Inventory = {load, ensureLoaded, resolveProduct, showView, getAvailability, getProducts: () => state.products.filter(complete)};
+    function rememberProduct(saved) {
+        ++loadVersion; pending = null;
+        state.products = [...state.products.filter(item => item.id !== saved.id), saved];
+        render();
+    }
+    app.Inventory = {load, ensureLoaded, resolveProduct, showView, getAvailability, rememberProduct,
+        getProducts: () => state.products.filter(complete), getAllProducts: () => state.products.slice()};
 }(window.InvoiceApp));
